@@ -1,9 +1,8 @@
 zip:
-	zip -r "githubpr-notifications-v`grep "\"version\"" src/manifest.json | cut -f2 -d':' | tr -d '" ,'`.zip" src
+	zip -r "githubpr-notifications-v`grep "\"version\"" src/manifest.json | cut -f4 -d'"'`.zip" src
 
 tag:
-	git diff-index --quiet HEAD --  # checks for unstaged/uncomitted files
-	git tag "v`grep "\"version\"" src/manifest.json | cut -f2 -d':' | tr -d '" ,'`"
+	git tag "v`grep "\"version\"" src/manifest.json | cut -f4 -d'"'`"
 	git push --tags
 
 check-master:
