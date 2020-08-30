@@ -40,3 +40,10 @@ Temporary Items
 .apdisk
 
 .dropbox
+
+# WebStorm
+**/workspace.xml
+**/usage.statistics.xml
+**/tasks.xml
+**/modules.xml
+**/*.iml
