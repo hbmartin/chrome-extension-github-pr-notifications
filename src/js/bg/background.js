@@ -1,6 +1,6 @@
 const ghSuccessIcons = ["icons/success/baracktocat.png", "icons/success/mardigrastocat.png", "icons/success/welcometocat.png"];
 const ghErrorIcons = ["icons/error/luchadortocat.png", "icons/error/minion.png", "icons/error/octofez.png"];
-const ghCommentIcons = ["icons/comment/murakamicat.png", "icons/comment/professortocat.png", "icons/error/sailor.png"];
+const ghCommentIcons = ["icons/comment/murakamicat.png", "icons/comment/professortocat.png", "icons/comment/sailor.png"];
 
 function randomItemFormList(items) {
     return items[~~(items.length * Math.random())];
@@ -20,8 +20,7 @@ function getIconFor(message) {
 chrome.extension.onMessage.addListener(
     (request, sender, sendResponse) => {
         const notificationId = sender.tab.id.toString();
-        chrome.notifications.clear(notificationId, (wasCleared) => {
-        });
+        chrome.notifications.clear(notificationId, (wasCleared) => { });
         const iconUrlForNotification = getIconFor(request.content);
         chrome.notifications.create(
             notificationId, {
