@@ -1,87 +1,119 @@
-console.log("inject.js");
+(function () {
+    const Status = {
+        IN_PROGRESS: 'in_progress',
+        FAILED: 'failed',
+        SUCCESS: 'success'
+    }
 
-const targetNode = document.getElementsByClassName("discussion-timeline-actions")[0];
+    const TargetNode = document.getElementsByClassName("discussion-timeline-actions")[0];
+    const State = {
+        "completed": undefined,
+        "ciStatus": {},
+		"comments": []
+    };
 
-function initiallyComplete() {
-	const actionItemIcons = targetNode.getElementsByClassName("branch-action-item-icon");
-	if (actionItemIcons.length >= 2) {
-		const svgs = actionItemIcons[1].getElementsByTagName("svg");
-		if (svgs.length > 0) {
-			return svgs[0].classList.contains("octicon-check");
-		}
-	}
-	return false;
-}
+    function getStatusList(target) {
+        let statusList = target.getElementsByClassName("merge-status-list js-updatable-content-preserve-scroll-position")
+        if (statusList.length > 0) {
+            return statusList[0];
+        }
+        return undefined;
+    }
 
-const ghProgresState = {
-	"completed": initiallyComplete(),
-	"ciStatus": {}
-};
-// todo: scan individual CI at launch
+    function checkCompleted(target, completionCallback) {
+        let statusList = getStatusList(target);
+        if (statusList !== undefined) {
 
-function observeDom() {
-	const callback = function(mutationsList, observer) {
-		for (let mutation of mutationsList) {
-			if (mutation.type === 'childList') {
-				const actionItemIcons = mutation.target.getElementsByClassName("branch-action-item-icon");
-				if (actionItemIcons.length >= 2) {
-					const svgs = actionItemIcons[1].getElementsByTagName("svg");
-					if (svgs.length > 0) {
-						if (svgs[0].classList.contains("octicon-check")) {
-							if (!ghProgresState["completed"]) {
-								chrome.runtime.sendMessage({ content: "✅ CI successful" }, (response) => {});
-							}
-							ghProgresState["completed"] = true;
-						} else {
-							if (ghProgresState["completed"]) {
-								ghProgresState["ciStatus"] = {};
-							}
-							ghProgresState["completed"] = false;
-						}
-					}
-				}
-				if (!ghProgresState["completed"]) {
-					const statusList = mutation.target.getElementsByClassName("merge-status-list js-updatable-content-preserve-scroll-position")
-					if (statusList.length > 0) {
-						const statusItems = statusList[0].getElementsByClassName("merge-status-item");
-						for (let item of statusItems) {
-							const itemNameCandidates = item.getElementsByClassName("text-emphasized");
-							if (itemNameCandidates.length == 0) { continue }
-							const itemName = itemNameCandidates[0].innerText.trim();
-							
-							if (!(itemName in ghProgresState["ciStatus"]) || ghProgresState["ciStatus"][itemName] == "in_progress") {
-								const svgs = item.getElementsByTagName("svg");
-								if (svgs.length > 0) {
-									const iconSvg = svgs[0];
-									const inProgress= iconSvg.classList.contains("color-yellow-7");
-									if (inProgress) {
-										ghProgresState["ciStatus"][itemName] = "in_progress";
-									} else {
-										const didFail = iconSvg.classList.contains("text-red");
-										// const didSucceed = iconSvg.classList.contains("text-green");
-										if (didFail) {
-											ghProgresState["ciStatus"][itemName] = "fail";
-											chrome.runtime.sendMessage({ content: "❌ " + itemName }, (response) => {});
-										} else {
-											ghProgresState["ciStatus"][itemName] = "success";
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			} else {
-				console.log("Mutation type unknown")
-				console.log(mutation);
-			}
-		}
-	};
+            let actionItemIcons = statusList.parentNode.getElementsByClassName("branch-action-item-icon");
+            if (actionItemIcons.length >= 1) {
+                let svgs = actionItemIcons[0].getElementsByTagName("svg");
+                if (svgs.length > 0) {
+                    if (svgs[0].classList.contains("octicon-check")) {
+                        if (!State["completed"]) {
+                            if (typeof completionCallback === 'function') {
+                                completionCallback()
+                            }
+                        }
+                        State["completed"] = true;
+                    } else {
+                        if (State["completed"]) {
+                            State["ciStatus"] = {};
+                        }
+                        State["completed"] = false;
+                    }
+                }
+            }
+        }
+    }
 
-	const observer = new MutationObserver(callback);
-	observer.observe(targetNode, {"childList": true, "subtree": true});
-}
+    function checkStatuses(target, failureCallback) {
+        let statusList = getStatusList(target);
+        if (statusList !== undefined) {
+            let statusItems = statusList.getElementsByClassName("merge-status-item");
+            for (let item of statusItems) {
+                let itemNameCandidates = item.getElementsByClassName("text-emphasized");
+                if (itemNameCandidates.length === 0) {
+                    continue
+                }
+                let itemName = itemNameCandidates[0].innerText.trim();
 
-observeDom();
+                if (!(itemName in State["ciStatus"]) || State["ciStatus"][itemName] === Status.IN_PROGRESS) {
+                    let svgs = item.getElementsByTagName("svg");
+                    if (svgs.length > 0) {
+                        let iconSvg = svgs[0];
+                        let inProgress = iconSvg.classList.contains("color-yellow-7");
+                        if (inProgress) {
+                            State["ciStatus"][itemName] = Status.IN_PROGRESS;
+                        } else {
+                            let didFail = iconSvg.classList.contains("text-red");
+                            // const didSucceed = iconSvg.classList.contains("text-green");
+                            if (didFail) {
+                                State["ciStatus"][itemName] = Status.FAILED;
+                                if (typeof failureCallback === 'function') {
+                                    failureCallback(itemName)
+                                }
+                            } else {
+                                State["ciStatus"][itemName] = Status.SUCCESS;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-// observer.disconnect();
+    checkCompleted(TargetNode, () => {
+        console.log(`CI completed on load`)
+    });
+    checkStatuses(TargetNode, (itemName) => {
+        console.log(`Ignoring failure for ${itemName}`)
+    });
+
+    function observeDom() {
+        const callback = function (mutationsList, observer) {
+            for (let mutation of mutationsList) {
+                if (mutation.type === 'childList') {
+                    checkCompleted(mutation.target, () => {
+                        chrome.runtime.sendMessage({content: "✅ CI successful"}, (response) => {
+                        });
+                    });
+
+                    if (!State["completed"]) {
+                        checkStatuses(mutation.target, (itemName) => {
+                            chrome.runtime.sendMessage({content: `❌ ${itemName}`}, (response) => {
+                            });
+                        });
+                    }
+                } else {
+                    console.log("Mutation type unknown")
+                    console.log(mutation);
+                }
+            }
+        };
+
+        const observer = new MutationObserver(callback);
+        observer.observe(TargetNode, {"childList": true, "subtree": true});
+    }
+
+    observeDom();
+})();
