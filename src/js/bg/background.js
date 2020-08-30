@@ -1,17 +1,20 @@
 const ghSuccessIcons = ["icons/success/baracktocat.png", "icons/success/mardigrastocat.png", "icons/success/welcometocat.png"];
 const ghErrorIcons = ["icons/error/luchadortocat.png", "icons/error/minion.png", "icons/error/octofez.png"];
+const ghCommentIcons = ["icons/comment/murakamicat.png", "icons/comment/professortocat.png", "icons/error/sailor.png"];
 
 function randomItemFormList(items) {
     return items[~~(items.length * Math.random())];
 }
 
 function getIconFor(message) {
-	if (message.startsWith("✅")) {
-		return randomItemFormList(ghSuccessIcons)
-	} else if (message.startsWith("❌")) {
-		return randomItemFormList(ghErrorIcons);
-	}
-	return 'icons/icon128.png';
+    if (message.startsWith("✅")) {
+        return randomItemFormList(ghSuccessIcons)
+    } else if (message.startsWith("❌")) {
+        return randomItemFormList(ghErrorIcons);
+    } else if (message.startsWith("💬")) {
+        return randomItemFormList(ghCommentIcons);
+    }
+    return 'icons/icon128.png';
 }
 
 chrome.extension.onMessage.addListener(
