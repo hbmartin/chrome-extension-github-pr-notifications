@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build:zip
+
+      - name: Create GitHub Release with zips
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+
+      # Publishes to the Chrome Web Store when store credentials are
+      # configured as repository secrets; skipped otherwise.
+      - name: Check for Chrome Web Store credentials
+        id: cws
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+        run: echo "enabled=${{ env.CWS_CLIENT_ID != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Chrome Web Store
+        if: steps.cws.outputs.enabled == 'true'
+        env:
+          EXTENSION_ID: ekcbhjllakigielkhnkingmfpbgfgiie
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          npx chrome-webstore-upload-cli@3 upload \
+            --source dist/github-pr-notifications-chrome-v*.zip \
+            --extension-id "$EXTENSION_ID" \
+            --auto-publish

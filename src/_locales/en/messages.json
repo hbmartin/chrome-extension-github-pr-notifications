@@ -1,6 +1,26 @@
 {
-  "l10nTabName": {
-    "message":"Localization"
-    ,"description":"name of the localization tab"
+  "extName": {
+    "message": "GitHub PR Notifications",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Notifications for GitHub PR CI status changes and comments, plus PR bookmark syncing",
+    "description": "Extension description"
+  },
+  "notifCiSuccess": {
+    "message": "✅ CI successful",
+    "description": "Notification message when all CI checks pass"
+  },
+  "notifCiFailurePrefix": {
+    "message": "❌",
+    "description": "Prefix for CI failure notifications"
+  },
+  "notifCommentPrefix": {
+    "message": "💬",
+    "description": "Prefix for comment notifications"
+  },
+  "notifReviewPrefix": {
+    "message": "🔍",
+    "description": "Prefix for review notifications"
   }
 }
