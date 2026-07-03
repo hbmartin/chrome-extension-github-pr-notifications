@@ -119,7 +119,7 @@ $('syncNow').addEventListener('click', async () => {
     else if (result?.error) setStatus(`Sync failed: ${result.error}`);
     else setStatus(`Synced ${result?.prs?.length ?? 0} PRs.`);
   } catch (error) {
-    setStatus(`Sync failed: ${error.message ?? error}`);
+    setStatus(`Sync failed: ${error?.message ?? String(error)}`);
   }
 });
 
@@ -127,9 +127,13 @@ $('createFolder').addEventListener('click', async () => {
   const title = window.prompt('Name for the new bookmark folder:', 'GitHub PRs');
   const trimmedTitle = title?.trim();
   if (!trimmedTitle) return;
-  const folder = await browser.bookmarks.create({ title: trimmedTitle });
-  await populateFolders(folder.id);
-  setStatus(`Created folder “${trimmedTitle}”.`);
+  try {
+    const folder = await browser.bookmarks.create({ title: trimmedTitle });
+    await populateFolders(folder.id);
+    setStatus(`Created folder “${trimmedTitle}”.`);
+  } catch (error) {
+    setStatus(`Failed to create folder: ${error?.message ?? String(error)}`);
+  }
 });
 
 restore();

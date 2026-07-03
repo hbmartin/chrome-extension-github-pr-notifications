@@ -19,14 +19,21 @@ export async function syncPrBookmarks(bookmarksApi, folderId, prs) {
   const children = await bookmarksApi.getChildren(folderId);
   const stale = children.filter(isPrBookmark);
   const created = [];
-  for (const pr of prs) {
-    created.push(
-      await bookmarksApi.create({
-        parentId: folderId,
-        title: bookmarkTitle(pr),
-        url: pr.url,
-      })
-    );
+  try {
+    for (const pr of prs) {
+      created.push(
+        await bookmarksApi.create({
+          parentId: folderId,
+          title: bookmarkTitle(pr),
+          url: pr.url,
+        })
+      );
+    }
+  } catch (error) {
+    for (const bookmark of created) {
+      await bookmarksApi.remove(bookmark.id).catch(() => {});
+    }
+    throw error;
   }
   for (const bookmark of stale) {
     await bookmarksApi.remove(bookmark.id);

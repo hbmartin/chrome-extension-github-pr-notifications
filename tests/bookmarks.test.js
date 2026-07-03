@@ -103,4 +103,13 @@ describe('syncPrBookmarks', () => {
     await expect(syncPrBookmarks(api, 'folder-1', prs)).rejects.toThrow(/create failed/);
     expect(api.children.map((c) => c.title)).toEqual(['stale']);
   });
+
+  it('removes partially created bookmarks if a later create fails', async () => {
+    const api = fakeBookmarksApi(
+      [{ id: '3', url: 'https://github.com/a/b/pull/5', title: 'stale' }],
+      { failCreateAt: 2 }
+    );
+    await expect(syncPrBookmarks(api, 'folder-1', prs)).rejects.toThrow(/create failed/);
+    expect(api.children.map((c) => c.title)).toEqual(['stale']);
+  });
 });
