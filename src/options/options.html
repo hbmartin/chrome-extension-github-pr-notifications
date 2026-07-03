@@ -10,82 +10,89 @@
     <main>
       <h1>GitHub PR Notifications</h1>
 
-      <section>
-        <h2>GitHub account</h2>
-        <label for="token">Personal access token</label>
-        <input type="password" id="token" placeholder="ghp_… or github_pat_…" autocomplete="off" />
-        <p class="hint">
-          Required for bookmark sync. Create a
-          <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer">token</a>
-          with <code>repo</code> scope (classic) or read access to pull requests (fine-grained).
-          Stored locally in your browser and only sent to your GitHub host.
-        </p>
+      <form id="settingsForm">
+        <section>
+          <h2>GitHub account</h2>
+          <label for="token">Personal access token</label>
+          <input
+            type="password"
+            id="token"
+            placeholder="ghp_… or github_pat_…"
+            autocomplete="off"
+          />
+          <p class="hint">
+            Required for bookmark sync. Create a
+            <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer">token</a>
+            with <code>repo</code> scope (classic) or read access to pull requests (fine-grained).
+            Stored locally in your browser and only sent to your GitHub host.
+          </p>
 
-        <label for="githubHost">GitHub host</label>
-        <input type="text" id="githubHost" placeholder="github.com" />
-        <p class="hint">
-          Change this only for GitHub Enterprise (e.g. <code>github.mycorp.com</code>).
-        </p>
-      </section>
+          <label for="githubHost">GitHub host</label>
+          <input type="text" id="githubHost" placeholder="github.com" />
+          <p class="hint">
+            Change this only for GitHub Enterprise (e.g. <code>github.mycorp.com</code>).
+          </p>
+        </section>
 
-      <section>
-        <h2>Notifications</h2>
-        <label class="check"><input type="checkbox" id="notifyCiSuccess" /> CI success ✅</label>
-        <label class="check"><input type="checkbox" id="notifyCiFailure" /> CI failure ❌</label>
-        <label class="check"><input type="checkbox" id="notifyComments" /> Comments 💬</label>
-        <label class="check"><input type="checkbox" id="notifyReviews" /> Reviews 🔍</label>
+        <section>
+          <h2>Notifications</h2>
+          <label class="check"><input type="checkbox" id="notifyCiSuccess" /> CI success ✅</label>
+          <label class="check"><input type="checkbox" id="notifyCiFailure" /> CI failure ❌</label>
+          <label class="check"><input type="checkbox" id="notifyComments" /> Comments 💬</label>
+          <label class="check"><input type="checkbox" id="notifyReviews" /> Reviews 🔍</label>
 
-        <label for="iconTheme">Notification icon style</label>
-        <select id="iconTheme">
-          <option value="octocat">Random Octocats (fun)</option>
-          <option value="plain">Extension icon (plain)</option>
-        </select>
-      </section>
+          <label for="iconTheme">Notification icon style</label>
+          <select id="iconTheme">
+            <option value="octocat">Random Octocats (fun)</option>
+            <option value="plain">Extension icon (plain)</option>
+          </select>
+        </section>
 
-      <section>
-        <h2>PR bookmark sync</h2>
-        <label class="check"
-          ><input type="checkbox" id="syncEnabled" /> Sync my PRs to a bookmark folder</label
-        >
-        <p class="hint">
-          On every sync, PR bookmarks in the folder are removed and replaced with the current list
-          from the GitHub API. Other bookmarks in the folder are untouched. Status prefix: 🟢
-          passing · 🟡 pending · 🔴 failing · ⚪ draft · 🟣 merged · ⚫ closed
-        </p>
+        <section>
+          <h2>PR bookmark sync</h2>
+          <label class="check"
+            ><input type="checkbox" id="syncEnabled" /> Sync my PRs to a bookmark folder</label
+          >
+          <p class="hint">
+            On every sync, PR bookmarks in the folder are removed and replaced with the current list
+            from the GitHub API. Other bookmarks in the folder are untouched. Status prefix: 🟢
+            passing · 🟡 pending · 🔴 failing · ⚪ draft · 🟣 merged · ⚫ closed
+          </p>
 
-        <label for="syncFolder">Bookmark folder</label>
-        <div class="row">
-          <select id="syncFolder"></select>
-          <button type="button" id="createFolder">New folder…</button>
+          <label for="syncFolder">Bookmark folder</label>
+          <div class="row">
+            <select id="syncFolder"></select>
+            <button type="button" id="createFolder">New folder…</button>
+          </div>
+
+          <label for="syncRole">Which PRs</label>
+          <select id="syncRole">
+            <option value="author">Opened by me</option>
+            <option value="assigned">Assigned to me</option>
+            <option value="mentioned">Mentioning me</option>
+            <option value="review-requested">Review requested from me</option>
+          </select>
+
+          <label for="syncState">PR state</label>
+          <select id="syncState">
+            <option value="open">Open only</option>
+            <option value="closed">Closed only</option>
+            <option value="all">Open and closed</option>
+          </select>
+
+          <label for="syncLimit">Maximum PRs (1–100)</label>
+          <input type="number" id="syncLimit" min="1" max="100" step="1" />
+
+          <label for="syncInterval">Sync every (minutes)</label>
+          <input type="number" id="syncInterval" min="1" step="1" />
+        </section>
+
+        <div class="actions">
+          <button type="submit" id="save" class="primary">Save</button>
+          <button type="button" id="syncNow">Sync now</button>
+          <span id="status" role="status"></span>
         </div>
-
-        <label for="syncRole">Which PRs</label>
-        <select id="syncRole">
-          <option value="author">Opened by me</option>
-          <option value="assigned">Assigned to me</option>
-          <option value="mentioned">Mentioning me</option>
-          <option value="review-requested">Review requested from me</option>
-        </select>
-
-        <label for="syncState">PR state</label>
-        <select id="syncState">
-          <option value="open">Open only</option>
-          <option value="closed">Closed only</option>
-          <option value="all">Open and closed</option>
-        </select>
-
-        <label for="syncLimit">Maximum PRs (1–100)</label>
-        <input type="number" id="syncLimit" min="1" max="100" step="1" />
-
-        <label for="syncInterval">Sync every (minutes)</label>
-        <input type="number" id="syncInterval" min="1" step="1" />
-      </section>
-
-      <div class="actions">
-        <button type="button" id="save" class="primary">Save</button>
-        <button type="button" id="syncNow">Sync now</button>
-        <span id="status" role="status"></span>
-      </div>
+      </form>
     </main>
     <script src="options.js"></script>
   </body>

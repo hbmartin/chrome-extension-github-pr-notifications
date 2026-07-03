@@ -6,6 +6,10 @@ dist/
 build/
 *.zip
 
+# Local PR review triage artifacts
+reviews_triage/
+triage_decisions.db
+
 # IDE
 .idea/
 .vscode/

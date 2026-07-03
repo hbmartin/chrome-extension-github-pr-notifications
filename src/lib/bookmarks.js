@@ -18,15 +18,18 @@ export function isPrBookmark(bookmark) {
 export async function syncPrBookmarks(bookmarksApi, folderId, prs) {
   const children = await bookmarksApi.getChildren(folderId);
   const stale = children.filter(isPrBookmark);
+  const created = [];
+  for (const pr of prs) {
+    created.push(
+      await bookmarksApi.create({
+        parentId: folderId,
+        title: bookmarkTitle(pr),
+        url: pr.url,
+      })
+    );
+  }
   for (const bookmark of stale) {
     await bookmarksApi.remove(bookmark.id);
   }
-  for (const pr of prs) {
-    await bookmarksApi.create({
-      parentId: folderId,
-      title: bookmarkTitle(pr),
-      url: pr.url,
-    });
-  }
-  return { removed: stale.length, added: prs.length };
+  return { removed: stale.length, added: created.length };
 }

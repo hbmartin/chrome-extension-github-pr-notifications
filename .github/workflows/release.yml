@@ -22,7 +22,7 @@ jobs:
       - run: npm run build:zip
 
       - name: Create GitHub Release with zips
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           files: dist/*.zip
           generate_release_notes: true
@@ -33,7 +33,14 @@ jobs:
         id: cws
         env:
           CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-        run: echo "enabled=${{ env.CWS_CLIENT_ID != '' }}" >> "$GITHUB_OUTPUT"
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          if [ -n "$CWS_CLIENT_ID" ] && [ -n "$CWS_CLIENT_SECRET" ] && [ -n "$CWS_REFRESH_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish to Chrome Web Store
         if: steps.cws.outputs.enabled == 'true'

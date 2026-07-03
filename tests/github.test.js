@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildSearchQuery,
   graphqlEndpoint,
+  normalizeGitHubHost,
   normalizePullRequest,
   fetchPullRequests,
 } from '../src/lib/github.js';
@@ -32,6 +33,7 @@ describe('buildSearchQuery', () => {
 describe('graphqlEndpoint', () => {
   it('uses api.github.com for github.com', () => {
     expect(graphqlEndpoint('github.com')).toBe('https://api.github.com/graphql');
+    expect(graphqlEndpoint('GitHub.com')).toBe('https://api.github.com/graphql');
     expect(graphqlEndpoint('')).toBe('https://api.github.com/graphql');
   });
 
@@ -40,6 +42,16 @@ describe('graphqlEndpoint', () => {
     expect(graphqlEndpoint('https://github.mycorp.com/foo')).toBe(
       'https://github.mycorp.com/api/graphql'
     );
+  });
+});
+
+describe('normalizeGitHubHost', () => {
+  it('returns lowercase hostnames without scheme or path', () => {
+    expect(normalizeGitHubHost(' https://GitHub.MyCorp.com/team/repo ')).toBe('github.mycorp.com');
+  });
+
+  it('defaults blank input to github.com', () => {
+    expect(normalizeGitHubHost('   ')).toBe('github.com');
   });
 });
 

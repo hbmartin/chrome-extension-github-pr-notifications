@@ -51,6 +51,14 @@ describe('getCiSummary (legacy markup)', () => {
     const root = dom('<div class="discussion-timeline-actions"><p>Nothing here</p></div>');
     expect(getCiSummary(root)).toBeNull();
   });
+
+  it('does not match CI phrases outside a merge box', () => {
+    const root = dom(`
+      <div id="issuecomment-1">
+        <div class="comment-body">All checks have passed on my machine.</div>
+      </div>`);
+    expect(getCiSummary(root)).toBeNull();
+  });
 });
 
 describe('getCiSummary (react merge box)', () => {
@@ -95,6 +103,11 @@ describe('getFailedCheckNames', () => {
     const root = dom(
       LEGACY_MERGE_BOX('All checks have passed', legacyStatusItem('ci/build', false))
     );
+    expect(getFailedCheckNames(root)).toEqual([]);
+  });
+
+  it('does not scan the full document when there is no merge box', () => {
+    const root = dom('<span aria-label="build failed"></span>');
     expect(getFailedCheckNames(root)).toEqual([]);
   });
 });
