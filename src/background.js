@@ -127,7 +127,7 @@ async function scheduleSyncAlarm() {
   if (settings.sync.enabled) {
     browser.alarms.create(SYNC_ALARM_NAME, {
       periodInMinutes: settings.sync.intervalMinutes,
-      delayInMinutes: 0.1,
+      delayInMinutes: 0.5,
     });
   } else {
     await browser.action.setBadgeText({ text: '' });
@@ -151,7 +151,9 @@ browser.runtime.onStartup.addListener(scheduleSyncAlarm);
 
 browser.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'pr-event') {
-    handlePrEvent(message, sender);
+    handlePrEvent(message, sender).catch((error) => {
+      console.warn('Failed to handle PR event', error);
+    });
     return undefined;
   }
   if (message?.type === 'sync-now') {

@@ -1,5 +1,6 @@
 import browser from 'webextension-polyfill';
 import { loadSettings, saveSettings } from '../lib/settings.js';
+import { normalizeGitHubHost } from '../lib/github.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -55,7 +56,7 @@ async function restore() {
 function collect() {
   return {
     token: $('token').value.trim(),
-    githubHost: $('githubHost').value.trim() || 'github.com',
+    githubHost: normalizeGitHubHost($('githubHost').value),
     notifications: {
       ciSuccess: $('notifyCiSuccess').checked,
       ciFailure: $('notifyCiFailure').checked,
@@ -81,15 +82,18 @@ function setStatus(text) {
 
 /** GitHub Enterprise hosts need a runtime-granted host permission. */
 async function ensureHostPermission(githubHost) {
-  if (!githubHost || githubHost === 'github.com') return true;
-  const origin = `https://${githubHost}/*`;
+  const host = normalizeGitHubHost(githubHost);
+  if (host === 'github.com') return true;
+  const origin = `https://${host}/*`;
   const granted = await browser.permissions.contains({ origins: [origin] });
   if (granted) return true;
   return browser.permissions.request({ origins: [origin] });
 }
 
-$('save').addEventListener('click', async () => {
+$('settingsForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
   const settings = collect();
+  $('githubHost').value = settings.githubHost;
   if (settings.sync.enabled && !settings.sync.folderId) {
     setStatus('Choose a bookmark folder to enable sync.');
     return;
@@ -109,18 +113,23 @@ $('save').addEventListener('click', async () => {
 
 $('syncNow').addEventListener('click', async () => {
   setStatus('Syncing…');
-  const result = await browser.runtime.sendMessage({ type: 'sync-now' });
-  if (result?.skipped) setStatus(result.reason);
-  else if (result?.error) setStatus(`Sync failed: ${result.error}`);
-  else setStatus(`Synced ${result?.prs?.length ?? 0} PRs.`);
+  try {
+    const result = await browser.runtime.sendMessage({ type: 'sync-now' });
+    if (result?.skipped) setStatus(result.reason);
+    else if (result?.error) setStatus(`Sync failed: ${result.error}`);
+    else setStatus(`Synced ${result?.prs?.length ?? 0} PRs.`);
+  } catch (error) {
+    setStatus(`Sync failed: ${error.message ?? error}`);
+  }
 });
 
 $('createFolder').addEventListener('click', async () => {
   const title = window.prompt('Name for the new bookmark folder:', 'GitHub PRs');
-  if (!title) return;
-  const folder = await browser.bookmarks.create({ title });
+  const trimmedTitle = title?.trim();
+  if (!trimmedTitle) return;
+  const folder = await browser.bookmarks.create({ title: trimmedTitle });
   await populateFolders(folder.id);
-  setStatus(`Created folder “${title}”.`);
+  setStatus(`Created folder “${trimmedTitle}”.`);
 });
 
 restore();

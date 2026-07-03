@@ -58,9 +58,13 @@ async function refresh() {
 
 document.getElementById('syncNow').addEventListener('click', async () => {
   footer.textContent = 'Syncing…';
-  const result = await browser.runtime.sendMessage({ type: 'sync-now' });
-  if (result?.skipped) footer.textContent = result.reason;
-  else render(result);
+  try {
+    const result = await browser.runtime.sendMessage({ type: 'sync-now' });
+    if (result?.skipped) footer.textContent = result.reason;
+    else render(result);
+  } catch (error) {
+    footer.textContent = `Sync failed: ${error.message ?? error}`;
+  }
 });
 
 document.getElementById('openOptions').addEventListener('click', () => {

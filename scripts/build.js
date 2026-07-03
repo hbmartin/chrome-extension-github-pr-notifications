@@ -45,6 +45,18 @@ const targets = {
   }),
 };
 
+function ensureZipExecutable() {
+  try {
+    execFileSync('zip', ['-v'], { stdio: 'ignore' });
+  } catch {
+    throw new Error(
+      'npm run build:zip requires the zip executable. Install zip or run npm run build without --zip.'
+    );
+  }
+}
+
+if (shouldZip) ensureZipExecutable();
+
 rmSync(dist, { recursive: true, force: true });
 
 for (const [browser, transform] of Object.entries(targets)) {

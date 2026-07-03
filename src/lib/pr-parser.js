@@ -42,7 +42,8 @@ export function findMergeBox(root) {
  * box / no checks section (e.g. closed PRs, Files tab).
  */
 export function getCiSummary(root) {
-  const scope = findMergeBox(root) ?? root;
+  const scope = findMergeBox(root);
+  if (!scope) return null;
   const text = scope.textContent ?? '';
   for (const [phrase, summary] of SUMMARY_PHRASES) {
     if (text.includes(phrase)) return summary;
@@ -56,7 +57,8 @@ export function getCiSummary(root) {
  * can't be determined (callers should still trust getCiSummary()).
  */
 export function getFailedCheckNames(root) {
-  const scope = findMergeBox(root) ?? root;
+  const scope = findMergeBox(root);
+  if (!scope) return [];
   const failed = new Set();
 
   // Legacy markup: one .merge-status-item per check.

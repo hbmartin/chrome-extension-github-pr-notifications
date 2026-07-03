@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { isPrBookmark, syncPrBookmarks } from '../src/lib/bookmarks.js';
 
-function fakeBookmarksApi(initialChildren) {
+function fakeBookmarksApi(initialChildren, options = {}) {
   let nextId = 1000;
   const children = [...initialChildren];
+  let createCalls = 0;
   return {
     children,
     async getChildren() {
@@ -15,6 +16,10 @@ function fakeBookmarksApi(initialChildren) {
       children.splice(index, 1);
     },
     async create(bookmark) {
+      createCalls += 1;
+      if (options.failCreateAt === createCalls) {
+        throw new Error('create failed');
+      }
       const created = { id: String(nextId++), ...bookmark };
       children.push(created);
       return created;
@@ -88,5 +93,14 @@ describe('syncPrBookmarks', () => {
     const result = await syncPrBookmarks(api, 'folder-1', []);
     expect(result).toEqual({ removed: 1, added: 0 });
     expect(api.children).toHaveLength(0);
+  });
+
+  it('keeps stale bookmarks if creating replacements fails', async () => {
+    const api = fakeBookmarksApi(
+      [{ id: '3', url: 'https://github.com/a/b/pull/5', title: 'stale' }],
+      { failCreateAt: 1 }
+    );
+    await expect(syncPrBookmarks(api, 'folder-1', prs)).rejects.toThrow(/create failed/);
+    expect(api.children.map((c) => c.title)).toEqual(['stale']);
   });
 });

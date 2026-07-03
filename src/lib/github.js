@@ -13,6 +13,23 @@ const ROLE_QUALIFIERS = {
 
 export const SYNC_ROLES = Object.keys(ROLE_QUALIFIERS);
 
+export function normalizeGitHubHost(githubHost) {
+  const raw = (githubHost || 'github.com').trim();
+  if (!raw) return 'github.com';
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return url.hostname.toLowerCase() || 'github.com';
+  } catch {
+    return (
+      raw
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/.*$/, '')
+        .toLowerCase() || 'github.com'
+    );
+  }
+}
+
 export function buildSearchQuery({ role, state }) {
   const qualifier = ROLE_QUALIFIERS[role] ?? ROLE_QUALIFIERS.author;
   let query = `is:pr ${qualifier} sort:updated-desc`;
@@ -23,10 +40,7 @@ export function buildSearchQuery({ role, state }) {
 }
 
 export function graphqlEndpoint(githubHost) {
-  const host = (githubHost || 'github.com')
-    .trim()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '');
+  const host = normalizeGitHubHost(githubHost);
   return host === 'github.com' ? 'https://api.github.com/graphql' : `https://${host}/api/graphql`;
 }
 

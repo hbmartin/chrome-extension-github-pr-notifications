@@ -32,6 +32,10 @@ function notify(kind, content) {
     });
 }
 
+function message(name, fallback) {
+  return browser.i18n.getMessage(name) || fallback;
+}
+
 function baseline() {
   state.prKey = currentPrKey();
   state.ciSummary = getCiSummary(document);
@@ -43,20 +47,23 @@ function scan() {
   const prKey = currentPrKey();
   if (!prKey) return;
   if (prKey !== state.prKey) {
-    baseline();
     return;
   }
 
   const summary = getCiSummary(document);
   if (summary && summary !== state.ciSummary) {
     if (summary === CiSummary.SUCCESS) {
-      notify('ci-success', '✅ CI successful');
+      notify('ci-success', message('notifCiSuccess', '✅ CI successful'));
     } else if (summary === CiSummary.FAILURE) {
       const failures = getFailedCheckNames(document).filter((n) => !state.failedChecks.has(n));
       if (failures.length > 0) {
-        for (const name of failures) notify('ci-failure', `❌ ${name}`);
+        for (const name of failures)
+          notify('ci-failure', `${message('notifCiFailurePrefix', '❌')} ${name}`);
       } else {
-        notify('ci-failure', '❌ Some checks were not successful');
+        notify(
+          'ci-failure',
+          `${message('notifCiFailurePrefix', '❌')} Some checks were not successful`
+        );
       }
     }
     state.ciSummary = summary;
@@ -67,15 +74,16 @@ function scan() {
     if (state.commentIds.has(id)) continue;
     state.commentIds.add(id);
     if (comment.kind === 'review') {
+      const reviewPrefix = message('notifReviewPrefix', '🔍');
       const verdict =
         comment.verdict === 'approved'
-          ? '🔍 Review: approved'
+          ? `${reviewPrefix} Review: approved`
           : comment.verdict === 'changes-requested'
-            ? '🔍 Review: changes requested'
-            : '🔍 New review';
+            ? `${reviewPrefix} Review: changes requested`
+            : `${reviewPrefix} New review`;
       notify('review', comment.text ? `${verdict} — ${comment.text}` : verdict);
     } else {
-      notify('comment', `💬 ${comment.text}`);
+      notify('comment', `${message('notifCommentPrefix', '💬')} ${comment.text}`);
     }
   }
 }
@@ -91,7 +99,7 @@ baseline();
 // GitHub replaces large DOM regions wholesale (Turbo + React), so observe
 // the whole body and debounce instead of pinning fragile target nodes.
 const observer = new MutationObserver(scheduleScan);
-observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
 // SPA navigation: re-baseline when the user moves to a different PR so the
 // new page's existing content doesn't fire notifications.
@@ -100,6 +108,3 @@ for (const event of ['turbo:load', 'turbo:render', 'pjax:end']) {
     if (currentPrKey() !== state.prKey) baseline();
   });
 }
-window.addEventListener('popstate', () => {
-  if (currentPrKey() !== state.prKey) baseline();
-});

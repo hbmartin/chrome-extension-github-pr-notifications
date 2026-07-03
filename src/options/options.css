@@ -5,6 +5,13 @@
   --accent: #1f883d;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --border: #30363d;
+    --hint: #8b949e;
+  }
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   margin: 0;
