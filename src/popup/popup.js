@@ -63,7 +63,7 @@ document.getElementById('syncNow').addEventListener('click', async () => {
     if (result?.skipped) footer.textContent = result.reason;
     else render(result);
   } catch (error) {
-    footer.textContent = `Sync failed: ${error.message ?? error}`;
+    footer.textContent = `Sync failed: ${error?.message ?? String(error)}`;
   }
 });
 
