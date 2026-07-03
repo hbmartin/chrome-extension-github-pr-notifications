@@ -10,7 +10,7 @@
     <main>
       <h1>GitHub PR Notifications</h1>
 
-      <form id="settingsForm" novalidate>
+      <form id="settingsForm">
         <section>
           <h2>GitHub account</h2>
           <label for="token">Personal access token</label>
@@ -81,10 +81,10 @@
           </select>
 
           <label for="syncLimit">Maximum PRs (1–100)</label>
-          <input type="number" id="syncLimit" min="1" max="100" step="1" />
+          <input type="number" id="syncLimit" min="1" max="100" step="1" required />
 
           <label for="syncInterval">Sync every (minutes)</label>
-          <input type="number" id="syncInterval" min="1" step="1" />
+          <input type="number" id="syncInterval" min="1" step="1" required />
         </section>
 
         <div class="actions">

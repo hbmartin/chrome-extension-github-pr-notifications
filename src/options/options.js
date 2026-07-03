@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { loadSettings, saveSettings } from '../lib/settings.js';
+import { loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +75,12 @@ function collect() {
   };
 }
 
+function reflectSanitizedFields(settings) {
+  $('githubHost').value = settings.githubHost;
+  $('syncLimit').value = settings.sync.limit;
+  $('syncInterval').value = settings.sync.intervalMinutes;
+}
+
 function setStatus(text) {
   $('status').textContent = text;
   if (text) setTimeout(() => ($('status').textContent = ''), 5000);
@@ -90,10 +96,15 @@ async function ensureHostPermission(githubHost) {
   return browser.permissions.request({ origins: [origin] });
 }
 
-$('settingsForm').addEventListener('submit', async (event) => {
+export async function handleSettingsSubmit(event) {
   event.preventDefault();
-  const settings = collect();
-  $('githubHost').value = settings.githubHost;
+  if (!event.currentTarget.checkValidity()) {
+    event.currentTarget.reportValidity();
+    return;
+  }
+
+  const settings = mergeSettings(collect());
+  reflectSanitizedFields(settings);
   if (settings.sync.enabled && !settings.sync.folderId) {
     setStatus('Choose a bookmark folder to enable sync.');
     return;
@@ -109,7 +120,7 @@ $('settingsForm').addEventListener('submit', async (event) => {
   }
   await saveSettings(browser.storage.local, settings);
   setStatus('Saved.');
-});
+}
 
 $('syncNow').addEventListener('click', async () => {
   setStatus('Syncing…');
@@ -123,17 +134,28 @@ $('syncNow').addEventListener('click', async () => {
   }
 });
 
-$('createFolder').addEventListener('click', async () => {
+export async function handleCreateFolder() {
   const title = window.prompt('Name for the new bookmark folder:', 'GitHub PRs');
   const trimmedTitle = title?.trim();
   if (!trimmedTitle) return;
+  let folder;
   try {
-    const folder = await browser.bookmarks.create({ title: trimmedTitle });
+    folder = await browser.bookmarks.create({ title: trimmedTitle });
+  } catch (error) {
+    setStatus(`Failed to create folder: ${error?.message ?? String(error)}`);
+    return;
+  }
+
+  try {
     await populateFolders(folder.id);
     setStatus(`Created folder “${trimmedTitle}”.`);
   } catch (error) {
-    setStatus(`Failed to create folder: ${error?.message ?? String(error)}`);
+    setStatus(
+      `Created folder “${trimmedTitle}”, but failed to update folder list: ${error?.message ?? String(error)}`
+    );
   }
-});
+}
 
+$('settingsForm').addEventListener('submit', handleSettingsSubmit);
+$('createFolder').addEventListener('click', handleCreateFolder);
 restore();

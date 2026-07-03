@@ -13,6 +13,9 @@ function fakeBookmarksApi(initialChildren, options = {}) {
     async remove(id) {
       const index = children.findIndex((c) => c.id === id);
       if (index === -1) throw new Error(`no bookmark ${id}`);
+      if (options.failRemoveIds?.includes(id)) {
+        throw new Error(`remove failed for ${id}`);
+      }
       children.splice(index, 1);
     },
     async create(bookmark) {
@@ -111,5 +114,17 @@ describe('syncPrBookmarks', () => {
     );
     await expect(syncPrBookmarks(api, 'folder-1', prs)).rejects.toThrow(/create failed/);
     expect(api.children.map((c) => c.title)).toEqual(['stale']);
+  });
+
+  it('reports rollback failures when partially created bookmarks cannot be removed', async () => {
+    const api = fakeBookmarksApi(
+      [{ id: '3', url: 'https://github.com/a/b/pull/5', title: 'stale' }],
+      { failCreateAt: 2, failRemoveIds: ['1000'] }
+    );
+
+    await expect(syncPrBookmarks(api, 'folder-1', prs)).rejects.toThrow(
+      /Failed to create PR bookmark: create failed\. Rollback failed for bookmark ID\(s\): 1000\./
+    );
+    expect(api.children.map((c) => c.title)).toEqual(['stale', '🟢 First (a/b#1)']);
   });
 });

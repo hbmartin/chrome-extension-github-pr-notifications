@@ -7,6 +7,10 @@ export function isPrBookmark(bookmark) {
   return typeof bookmark.url === 'string' && PR_URL_RE.test(bookmark.url);
 }
 
+function errorMessage(error) {
+  return error?.message ?? String(error);
+}
+
 /**
  * Replace the PR bookmarks in `folderId` with fresh ones for `prs`.
  * Only bookmarks that look like PR links are removed; anything else the
@@ -30,8 +34,22 @@ export async function syncPrBookmarks(bookmarksApi, folderId, prs) {
       );
     }
   } catch (error) {
+    const rollbackFailures = [];
     for (const bookmark of created) {
-      await bookmarksApi.remove(bookmark.id).catch(() => {});
+      try {
+        await bookmarksApi.remove(bookmark.id);
+      } catch (rollbackError) {
+        rollbackFailures.push({ bookmarkId: bookmark.id, error: rollbackError });
+      }
+    }
+    if (rollbackFailures.length > 0) {
+      const bookmarkIds = rollbackFailures.map((failure) => failure.bookmarkId).join(', ');
+      const wrappedError = new Error(
+        `Failed to create PR bookmark: ${errorMessage(error)}. Rollback failed for bookmark ID(s): ${bookmarkIds}.`
+      );
+      wrappedError.cause = error;
+      wrappedError.rollbackFailures = rollbackFailures;
+      throw wrappedError;
     }
     throw error;
   }
