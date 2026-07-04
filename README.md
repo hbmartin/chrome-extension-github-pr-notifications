@@ -51,11 +51,11 @@ is what covers everything else.
 ## Development
 
 ```bash
-npm install
-npm test          # vitest unit tests
-npm run lint      # eslint + prettier
-npm run build     # bundles to dist/chrome and dist/firefox
-npm run build:zip # also produces store-ready zips
+pnpm install
+pnpm test          # vitest unit tests
+pnpm run lint      # eslint + prettier
+pnpm run build     # bundles to dist/chrome and dist/firefox
+pnpm run build:zip # also produces store-ready zips
 ```
 
 Load `dist/chrome` as an unpacked extension via `chrome://extensions` (Developer mode →

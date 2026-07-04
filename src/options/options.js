@@ -3,6 +3,18 @@ import { loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
 
 const $ = (id) => document.getElementById(id);
+const syncNumberInputIds = ['syncLimit', 'syncInterval'];
+
+function updateSyncNumberInputRequirements(syncEnabled = $('syncEnabled').checked) {
+  for (const id of syncNumberInputIds) {
+    $(id).required = syncEnabled;
+  }
+}
+
+function optionalNumberInputValue(id) {
+  const value = $(id).value;
+  return value === '' ? undefined : Number(value);
+}
 
 /** Flatten the bookmark tree into folders with depth for indentation. */
 export function flattenFolders(nodes, depth = 0, out = []) {
@@ -46,6 +58,7 @@ async function restore() {
   $('notifyReviews').checked = settings.notifications.reviews;
   $('iconTheme').value = settings.iconTheme;
   $('syncEnabled').checked = settings.sync.enabled;
+  updateSyncNumberInputRequirements(settings.sync.enabled);
   $('syncRole').value = settings.sync.role;
   $('syncState').value = settings.sync.state;
   $('syncLimit').value = settings.sync.limit;
@@ -69,8 +82,8 @@ function collect() {
       folderId: $('syncFolder').value,
       role: $('syncRole').value,
       state: $('syncState').value,
-      limit: Number($('syncLimit').value),
-      intervalMinutes: Number($('syncInterval').value),
+      limit: optionalNumberInputValue('syncLimit'),
+      intervalMinutes: optionalNumberInputValue('syncInterval'),
     },
   };
 }
@@ -98,6 +111,7 @@ async function ensureHostPermission(githubHost) {
 
 export async function handleSettingsSubmit(event) {
   event.preventDefault();
+  updateSyncNumberInputRequirements();
   if (!event.currentTarget.checkValidity()) {
     event.currentTarget.reportValidity();
     return;
@@ -158,4 +172,5 @@ export async function handleCreateFolder() {
 
 $('settingsForm').addEventListener('submit', handleSettingsSubmit);
 $('createFolder').addEventListener('click', handleCreateFolder);
+$('syncEnabled').addEventListener('change', () => updateSyncNumberInputRequirements());
 restore();
