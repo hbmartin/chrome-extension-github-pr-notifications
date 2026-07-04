@@ -38,8 +38,8 @@ function setupDom() {
       <select id="syncFolder"></select>
       <select id="syncRole"><option value="author">Author</option></select>
       <select id="syncState"><option value="open">Open</option></select>
-      <input type="number" id="syncLimit" min="1" max="100" step="1" required />
-      <input type="number" id="syncInterval" min="1" step="1" required />
+      <input type="number" id="syncLimit" min="1" max="100" step="1" />
+      <input type="number" id="syncInterval" min="1" step="1" />
       <button type="submit" id="save">Save</button>
       <button type="button" id="syncNow">Sync now</button>
       <button type="button" id="createFolder">New folder</button>
@@ -122,6 +122,42 @@ describe('options page submit handling', () => {
     const form = document.getElementById('settingsForm');
     form.checkValidity = vi.fn(() => false);
     form.reportValidity = vi.fn();
+
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+
+    expect(form.reportValidity).toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  it('does not require sync number fields when sync is disabled', async () => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+
+    document.getElementById('syncEnabled').checked = false;
+    document.getElementById('syncLimit').value = '';
+    document.getElementById('syncInterval').value = '';
+
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+
+    expect(form.reportValidity).not.toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ enabled: false, limit: 10, intervalMinutes: 10 }),
+      }),
+    });
+  });
+
+  it('requires sync number fields when sync is enabled', async () => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+
+    document.getElementById('syncEnabled').checked = true;
+    document.getElementById('syncLimit').value = '';
+    document.getElementById('syncInterval').value = '';
 
     await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
 
