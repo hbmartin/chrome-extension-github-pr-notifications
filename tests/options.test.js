@@ -41,6 +41,7 @@ function setupDom() {
       <textarea id="syncExcludedRepos"></textarea>
       <input type="number" id="syncLimit" min="1" max="100" step="1" />
       <input type="number" id="syncInterval" min="1" step="1" />
+      <input type="number" id="badgeMaxAgeHours" min="0" step="1" />
       <button type="submit" id="save">Save</button>
       <button type="button" id="syncNow">Sync now</button>
       <button type="button" id="createFolder">New folder</button>
@@ -236,6 +237,43 @@ describe('options page submit handling', () => {
 
     await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
 
+    expect(form.reportValidity).toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('options page badge hours', () => {
+  it.each([undefined, 24])('restores badge hours from storage: %s', async (hours) => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { badgeMaxAgeHours: hours },
+    });
+    await importOptionsModule();
+    expect(document.getElementById('badgeMaxAgeHours').value).toBe(String(hours ?? 0));
+  });
+
+  it.each(['24', '0', ''])('saves badge hours or all time: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const input = document.getElementById('badgeMaxAgeHours');
+    input.value = value;
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ badgeMaxAgeHours: Number(value) }),
+    });
+    expect(input.value).toBe(String(Number(value)));
+  });
+
+  it.each(['-1', '1.5'])('rejects invalid hours even when sync is disabled: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+    document.getElementById('badgeMaxAgeHours').value = value;
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
     expect(form.reportValidity).toHaveBeenCalled();
     expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
   });

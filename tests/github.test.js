@@ -85,6 +85,7 @@ describe('normalizePullRequest', () => {
       url: 'https://github.com/acme/widgets/pull/7',
       state: 'OPEN',
       isDraft: false,
+      updatedAt: '2026-10-20T12:00:00Z',
       repository: { nameWithOwner: 'acme/widgets' },
       commits: { nodes: [{ commit: { statusCheckRollup: { state: 'PENDING' } } }] },
     };
@@ -95,6 +96,7 @@ describe('normalizePullRequest', () => {
       state: 'OPEN',
       isDraft: false,
       repo: 'acme/widgets',
+      updatedAt: '2026-10-20T12:00:00Z',
       ci: 'PENDING',
     });
   });
@@ -109,6 +111,7 @@ describe('normalizePullRequest', () => {
       commits: { nodes: [{ commit: { statusCheckRollup: null } }] },
     };
     expect(normalizePullRequest(node).ci).toBeNull();
+    expect(normalizePullRequest(node).updatedAt).toBeNull();
   });
 });
 
@@ -133,6 +136,7 @@ describe('fetchPullRequests', () => {
                 url: 'https://github.com/a/b/pull/3',
                 state: 'MERGED',
                 isDraft: false,
+                updatedAt: '2026-10-20T12:00:00Z',
                 repository: { nameWithOwner: 'a/b' },
                 commits: { nodes: [] },
               },
@@ -148,6 +152,7 @@ describe('fetchPullRequests', () => {
     expect(url).toBe('https://api.github.com/graphql');
     expect(init.headers.Authorization).toBe('Bearer tok');
     const body = JSON.parse(init.body);
+    expect(body.query).toMatch(/\bupdatedAt\b/);
     expect(body.variables).toEqual({
       searchQuery: 'is:pr author:@me sort:updated-desc is:open',
       limit: 5,
@@ -156,6 +161,7 @@ describe('fetchPullRequests', () => {
     // Empty (non-PR) nodes are dropped.
     expect(prs).toHaveLength(1);
     expect(prs[0].state).toBe('MERGED');
+    expect(prs[0].updatedAt).toBe('2026-10-20T12:00:00Z');
   });
 
   it('sends repository exclusions to GitHub without reducing the requested PR limit', async () => {

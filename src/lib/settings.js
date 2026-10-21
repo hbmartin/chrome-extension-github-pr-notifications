@@ -4,6 +4,7 @@
  */
 
 export const SYNC_ALARM_NAME = 'pr-bookmark-sync';
+export const BADGE_EXPIRY_ALARM_NAME = 'pr-badge-expiry';
 
 export const DEFAULT_SETTINGS = {
   // GitHub personal access token. Required for bookmark sync; never sent
@@ -19,6 +20,8 @@ export const DEFAULT_SETTINGS = {
   },
   // 'octocat' → random themed Octodex icons; 'plain' → the extension icon.
   iconTheme: 'octocat',
+  // Count failing PRs updated within this many hours; 0 means all time.
+  badgeMaxAgeHours: 0,
   sync: {
     enabled: false,
     // Bookmark folder that PR bookmarks are synced into.
@@ -57,6 +60,12 @@ function deepMerge(defaults, overrides) {
 /** Merge stored (possibly partial/outdated) settings over the defaults. */
 export function mergeSettings(stored) {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
+  const hours =
+    typeof merged.badgeMaxAgeHours === 'number' || typeof merged.badgeMaxAgeHours === 'string'
+      ? Number(merged.badgeMaxAgeHours)
+      : 0;
+  merged.badgeMaxAgeHours =
+    Number.isSafeInteger(hours * 3_600_000) && Number.isInteger(hours) && hours >= 0 ? hours : 0;
   merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);
   const interval = Math.floor(Number(merged.sync.intervalMinutes));

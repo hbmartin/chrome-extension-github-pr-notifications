@@ -59,6 +59,7 @@ query PrSearch($searchQuery: String!, $limit: Int!) {
         url
         state
         isDraft
+        updatedAt
         repository { nameWithOwner }
         commits(last: 1) {
           nodes { commit { statusCheckRollup { state } } }
@@ -75,6 +76,7 @@ export function normalizePullRequest(node) {
     url: node.url,
     state: node.state,
     isDraft: Boolean(node.isDraft),
+    updatedAt: node.updatedAt ?? null,
     repo: node.repository?.nameWithOwner ?? '',
     ci: node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null,
   };
@@ -82,7 +84,7 @@ export function normalizePullRequest(node) {
 
 /**
  * Fetch the user's pull requests. Returns normalized PR objects:
- * { number, title, url, state, isDraft, repo, ci }
+ * { number, title, url, state, isDraft, updatedAt, repo, ci }
  */
 export async function fetchPullRequests(settings, fetchImpl = fetch) {
   if (!settings.token) {

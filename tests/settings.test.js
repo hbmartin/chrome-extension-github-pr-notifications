@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, mergeSettings, clampLimit } from '../src/lib/settings.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  DEFAULT_SETTINGS,
+  mergeSettings,
+  clampLimit,
+  loadSettings,
+  saveSettings,
+} from '../src/lib/settings.js';
 
 describe('mergeSettings', () => {
   it('returns defaults for empty storage', () => {
@@ -62,6 +68,50 @@ describe('mergeSettings', () => {
     const merged = mergeSettings({ sync: { limit: -5, intervalMinutes: 0 } });
     expect(merged.sync.limit).toBe(10);
     expect(merged.sync.intervalMinutes).toBe(1);
+  });
+});
+
+describe('badge age setting', () => {
+  it('defaults existing settings to all time', () => {
+    expect(mergeSettings({ token: 'existing-token' }).badgeMaxAgeHours).toBe(0);
+  });
+
+  it.each([1, 24, '48'])('accepts whole hours: %s', (value) => {
+    expect(mergeSettings({ badgeMaxAgeHours: value }).badgeMaxAgeHours).toBe(Number(value));
+  });
+
+  it.each([
+    undefined,
+    null,
+    '',
+    'nope',
+    -1,
+    1.5,
+    NaN,
+    Infinity,
+    Number.MAX_SAFE_INTEGER,
+    true,
+    {},
+    [24],
+  ])('normalizes blank or invalid stored hours to all time: %j', (value) => {
+    expect(mergeSettings({ badgeMaxAgeHours: value }).badgeMaxAgeHours).toBe(0);
+  });
+
+  it('persists and loads the badge limit alongside other settings', async () => {
+    let stored;
+    const storage = {
+      set: vi.fn(async (value) => {
+        stored = value;
+      }),
+      get: vi.fn(async () => stored),
+    };
+    await saveSettings(storage, {
+      badgeMaxAgeHours: 24,
+      sync: { excludedRepos: ['acme/widgets'] },
+    });
+    const settings = await loadSettings(storage);
+    expect(settings.badgeMaxAgeHours).toBe(24);
+    expect(settings.sync.excludedRepos).toEqual(['acme/widgets']);
   });
 });
 

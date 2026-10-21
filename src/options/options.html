@@ -101,6 +101,22 @@
           <input type="number" id="syncInterval" min="1" step="1" />
         </section>
 
+        <section>
+          <h2>Toolbar badge</h2>
+          <label for="badgeMaxAgeHours">Count PRs updated within the past (hours)</label>
+          <input
+            type="number"
+            id="badgeMaxAgeHours"
+            min="0"
+            step="1"
+            aria-describedby="badgeMaxAgeHoursHint"
+          />
+          <p class="hint" id="badgeMaxAgeHoursHint">
+            Count open PRs with failing checks based on when the PR was last updated. Enter whole
+            hours, or 0 (or leave blank) for all time. This affects only the badge count.
+          </p>
+        </section>
+
         <div class="actions">
           <button type="submit" id="save" class="primary">Save</button>
           <button type="button" id="syncNow">Sync now</button>

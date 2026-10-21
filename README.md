@@ -27,7 +27,8 @@ automatic syncing of your PRs into a bookmark folder.
   | 🟣    | merged                         |
   | ⚫    | closed without merging         |
 
-- **Toolbar popup** — your synced PRs at a glance, with a badge counting failing PRs.
+- **Toolbar popup** — your synced PRs at a glance, with a badge counting failing PRs and an
+  optional limit based on how recently each PR was updated.
 - **Configurable** — which events notify, which PRs to sync (opened by you / assigned /
   mentioned / review-requested; open, closed, or all), how many (default 10, single request,
   no pagination), repositories to exclude, how often, notification icon style, and GitHub
@@ -49,6 +50,14 @@ To hide PRs from certain repositories, enter their `owner/repo` names in **Optio
 bookmark sync → Excluded repositories**, one per line or separated by commas. Save, then
 click **Sync now** (or wait for the next sync) to update the popup, bookmarks, and badge.
 Exclusions apply before the maximum PR count. Clear the field to include all repositories again.
+
+To limit the badge to recent activity, set **Options → Toolbar badge → Count PRs updated within
+the past (hours)**, for example `24`, then save. Only open PRs with failing checks whose last
+update is less than that many hours ago count toward the badge. The count updates immediately
+from cached PRs and automatically decreases as PRs age out, even between syncs. Enter `0` or
+leave the field blank to count all failing PRs (the default). This setting affects only the badge;
+the popup, bookmarks, and notifications keep their existing behavior. Previously cached PRs
+without timestamps become eligible for the time filter after the next successful sync.
 
 CI/comment notifications need no token — they work by watching PR pages you have open in a tab.
 Notifications are per-tab, so a PR must be open in some tab for you to get them; bookmark sync
