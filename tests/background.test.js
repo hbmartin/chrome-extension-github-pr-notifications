@@ -37,6 +37,7 @@ async function startBackground() {
   vi.resetModules();
   await import('../src/background.js');
   await vi.waitFor(() => expect(mock.browser.action.setPopup).toHaveBeenCalled());
+  await vi.waitFor(() => expect(mock.browser.action.setBadgeText).toHaveBeenCalled());
 }
 
 beforeEach(() => {
@@ -66,16 +67,20 @@ describe('background display lifecycle', () => {
     }
   );
 
-  it.each(['onInstalled', 'onStartup'])('reapplies the preference on %s', async (name) => {
-    await startBackground();
-    mock.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
-    await mock.browser.runtime[name].emit();
+  it.each(['onInstalled', 'onStartup'])(
+    'restores the UI once when %s loads the worker',
+    async (name) => {
+      mock.browser = createBrowser('sidebar');
+      await startBackground();
+      await mock.browser.runtime[name].emit();
 
-    expect(mock.browser.action.setPopup).toHaveBeenLastCalledWith({ popup: '' });
-    expect(mock.browser.sidePanel.setPanelBehavior).toHaveBeenLastCalledWith({
-      openPanelOnActionClick: true,
-    });
-  });
+      expect(mock.browser.action.setPopup).toHaveBeenCalledExactlyOnceWith({ popup: '' });
+      expect(mock.browser.action.setBadgeText).toHaveBeenCalledOnce();
+      expect(mock.browser.sidePanel.setPanelBehavior).toHaveBeenLastCalledWith({
+        openPanelOnActionClick: true,
+      });
+    }
+  );
 
   it('applies saved changes in both directions and ignores unrelated storage events', async () => {
     await startBackground();
@@ -90,7 +95,7 @@ describe('background display lifecycle', () => {
 
     mock.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'popup' } });
     await mock.browser.storage.onChanged.emit(
-      { settings: { newValue: { displayMode: 'popup' } } },
+      { settings: { oldValue: { displayMode: 'sidebar' }, newValue: { displayMode: 'popup' } } },
       'local'
     );
     await vi.waitFor(() =>
@@ -113,12 +118,19 @@ describe('background display lifecycle', () => {
         })
     );
     mock.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
-    await mock.browser.storage.onChanged.emit({ settings: { newValue: {} } }, 'local');
+    const firstUpdate = mock.browser.storage.onChanged.emit(
+      { settings: { oldValue: { displayMode: 'popup' }, newValue: { displayMode: 'sidebar' } } },
+      'local'
+    );
     await vi.waitFor(() => expect(finishUpdate).toBeTypeOf('function'));
 
     mock.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'popup' } });
-    await mock.browser.storage.onChanged.emit({ settings: { newValue: {} } }, 'local');
+    const secondUpdate = mock.browser.storage.onChanged.emit(
+      { settings: { oldValue: { displayMode: 'sidebar' }, newValue: { displayMode: 'popup' } } },
+      'local'
+    );
     finishUpdate();
+    await Promise.all([firstUpdate, secondUpdate]);
     await vi.waitFor(() =>
       expect(mock.browser.sidePanel.setPanelBehavior).toHaveBeenLastCalledWith({
         openPanelOnActionClick: false,

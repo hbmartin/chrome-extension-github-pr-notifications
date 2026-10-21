@@ -23,6 +23,38 @@ describe('mergeSettings', () => {
     expect(merged.sync.excludedRepos).toEqual([]);
   });
 
+  it('keeps nested defaults, stored input, and separately loaded settings independent', async () => {
+    const defaults = structuredClone(DEFAULT_SETTINGS);
+    const input = { sync: { excludedRepos: ['acme/widgets'] }, notifications: { comments: false } };
+    const originalInput = structuredClone(input);
+    const first = mergeSettings();
+    const second = mergeSettings(input);
+    first.sync.enabled = true;
+    first.sync.excludedRepos.push('other/tools');
+    first.notifications.comments = false;
+    second.sync.excludedRepos.push('another/repo');
+    second.notifications.comments = true;
+
+    expect(DEFAULT_SETTINGS).toEqual(defaults);
+    expect(input).toEqual(originalInput);
+    expect(mergeSettings()).toEqual(defaults);
+    expect(await loadSettings({ get: async () => ({ settings: input }) })).toEqual(
+      mergeSettings(originalInput)
+    );
+  });
+
+  it('retains repository owners with enterprise-managed account underscores', async () => {
+    const storage = { set: vi.fn(), get: vi.fn() };
+    await saveSettings(storage, { sync: { excludedRepos: 'Mona_Acme/tools, mona_acme/tools' } });
+    expect(storage.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ excludedRepos: ['mona_acme/tools'] }),
+      }),
+    });
+    storage.get.mockResolvedValue(storage.set.mock.calls[0][0]);
+    expect((await loadSettings(storage)).sync.excludedRepos).toEqual(['mona_acme/tools']);
+  });
+
   it('preserves the sidebar preference alongside existing settings', () => {
     const settings = mergeSettings({
       displayMode: 'sidebar',

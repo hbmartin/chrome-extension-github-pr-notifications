@@ -1,6 +1,11 @@
 import browser from 'webextension-polyfill';
-import { BADGE_EXPIRY_ALARM_NAME, loadSettings, SYNC_ALARM_NAME } from './lib/settings.js';
-import { fetchPullRequests } from './lib/github.js';
+import {
+  BADGE_EXPIRY_ALARM_NAME,
+  loadSettings,
+  mergeSettings,
+  SYNC_ALARM_NAME,
+} from './lib/settings.js';
+import { fetchPullRequests, normalizeGitHubHost } from './lib/github.js';
 import { syncPrBookmarks } from './lib/bookmarks.js';
 import { configureDisplay } from './lib/display.js';
 import { getBadgeState } from './lib/badge.js';
@@ -118,6 +123,14 @@ export function refreshBadge() {
   return badgeRefresh;
 }
 
+async function refreshBadgeSafely() {
+  try {
+    await refreshBadge();
+  } catch (error) {
+    console.warn('Failed to refresh toolbar badge', error);
+  }
+}
+
 export async function runSync() {
   const settings = await loadSettings(browser.storage.local);
   if (!settings.sync.enabled) {
@@ -126,20 +139,19 @@ export async function runSync() {
   if (!settings.token || !settings.sync.folderId) {
     return { skipped: true, reason: 'Set a token and bookmark folder in Options first.' };
   }
+  let syncState;
   try {
     const prs = await fetchPullRequests(settings);
     await syncPrBookmarks(browser.bookmarks, settings.sync.folderId, prs);
-    const syncState = { lastSync: Date.now(), error: null, prs };
+    syncState = { lastSync: Date.now(), error: null, prs };
     await browser.storage.local.set({ syncState });
-    await refreshBadge();
-    return syncState;
   } catch (error) {
     const previous = (await browser.storage.local.get('syncState')).syncState ?? {};
-    const syncState = { ...previous, lastSync: Date.now(), error: String(error.message ?? error) };
+    syncState = { ...previous, lastSync: Date.now(), error: String(error.message ?? error) };
     await browser.storage.local.set({ syncState });
-    await refreshBadge();
-    return syncState;
   }
+  await refreshBadgeSafely();
+  return syncState;
 }
 
 async function scheduleSyncAlarm() {
@@ -151,18 +163,37 @@ async function scheduleSyncAlarm() {
       delayInMinutes: 0.5,
     });
   }
-  await refreshBadge();
 }
 
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === SYNC_ALARM_NAME) return runSync();
-  if (alarm.name === BADGE_EXPIRY_ALARM_NAME) return refreshBadge();
+  if (alarm.name === BADGE_EXPIRY_ALARM_NAME) return refreshBadgeSafely();
 });
+
+function syncSettingsKey(settings) {
+  return JSON.stringify([
+    settings.token,
+    normalizeGitHubHost(settings.githubHost),
+    { ...settings.sync, excludedRepos: [...settings.sync.excludedRepos].sort() },
+  ]);
+}
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.settings) {
-    updateDisplay();
-    return scheduleSyncAlarm();
+    const previous = mergeSettings(changes.settings.oldValue);
+    const current = mergeSettings(changes.settings.newValue);
+    const updates = [];
+    if (previous.displayMode !== current.displayMode) updates.push(updateDisplay());
+    if (syncSettingsKey(previous) !== syncSettingsKey(current)) {
+      updates.push(scheduleSyncAlarm());
+    }
+    if (
+      previous.badgeMaxAgeHours !== current.badgeMaxAgeHours ||
+      previous.sync.enabled !== current.sync.enabled
+    ) {
+      updates.push(refreshBadgeSafely());
+    }
+    return Promise.all(updates);
   }
 });
 
@@ -195,8 +226,7 @@ if (typeof browser.sidebarAction?.toggle === 'function') {
   });
 }
 
-browser.runtime.onInstalled.addListener(updateDisplay);
-browser.runtime.onStartup.addListener(updateDisplay);
+// Each worker instance restores the UI once, including startup and installation.
 updateDisplay();
 
 // ---------------------------------------------------------------------------
@@ -217,6 +247,4 @@ browser.runtime.onMessage.addListener((message, sender) => {
 });
 
 // Restore the badge and its one-shot alarm whenever the worker is restarted.
-refreshBadge().catch((error) => {
-  console.warn('Failed to refresh toolbar badge', error);
-});
+refreshBadgeSafely();

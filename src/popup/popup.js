@@ -14,19 +14,82 @@ let currentSyncState;
 let expiryTimer;
 let syncStateChanged = false;
 let settingsChanged = false;
+let syncStateLoaded = false;
+let syncStateRevision = 0;
+let syncRequestSequence = 0;
+const rows = new Map();
 
 function renderEmpty(text) {
+  rows.clear();
+  if (list.children.length === 1 && list.firstElementChild.className === 'empty') {
+    list.firstElementChild.textContent = text;
+    return;
+  }
   const li = document.createElement('li');
   li.className = 'empty';
   li.textContent = text;
   list.replaceChildren(li);
 }
 
+function createRow(url) {
+  const li = document.createElement('li');
+  const a = document.createElement('a');
+  a.href = url;
+  a.addEventListener('click', (event) => {
+    event.preventDefault();
+    browser.tabs.create({ url });
+    if (!isSidebar) window.close();
+  });
+  const emoji = document.createElement('span');
+  const title = document.createElement('span');
+  title.className = 'pr-title';
+  const repo = document.createElement('span');
+  repo.className = 'pr-repo';
+  a.append(emoji, title, repo);
+  li.append(a);
+  return { li, a, emoji, title, repo };
+}
+
+function renderPrs(prs) {
+  const focusedLink = list.contains(document.activeElement) ? document.activeElement : null;
+  const urls = new Set(prs.map((pr) => pr.url));
+  for (const [url, row] of rows) {
+    if (!urls.has(url)) {
+      row.li.remove();
+      rows.delete(url);
+    }
+  }
+  list.querySelector('.empty')?.remove();
+  let cursor = list.firstElementChild;
+  for (const pr of prs) {
+    let row = rows.get(pr.url);
+    if (!row) {
+      row = createRow(pr.url);
+      rows.set(pr.url, row);
+    }
+    const fields = [
+      [row.emoji, statusEmoji(pr)],
+      [row.title, pr.title],
+      [row.repo, `${pr.repo}#${pr.number}`],
+    ];
+    for (const [element, text] of fields) {
+      if (element.textContent !== text) element.textContent = text;
+    }
+    if (row.li !== cursor) list.insertBefore(row.li, cursor);
+    cursor = row.li.nextElementSibling;
+  }
+  if (focusedLink?.isConnected && document.activeElement !== focusedLink) {
+    focusedLink.focus({ preventScroll: true });
+  }
+}
+
 function render({ updateFooter = true } = {}) {
   clearTimeout(expiryTimer);
   expiryTimer = undefined;
   if (!currentSyncState) {
-    renderEmpty('No sync yet. Enable PR bookmark sync in Options, or hit ↻.');
+    renderEmpty(
+      syncStateLoaded ? 'No sync yet. Enable PR bookmark sync in Options, or hit ↻.' : 'Loading…'
+    );
     if (updateFooter) footer.textContent = '';
     return;
   }
@@ -45,29 +108,7 @@ function render({ updateFooter = true } = {}) {
         : 'No pull requests found.'
     );
   } else {
-    list.replaceChildren(
-      ...prs.map((pr) => {
-        const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = pr.url;
-        a.addEventListener('click', (event) => {
-          event.preventDefault();
-          browser.tabs.create({ url: pr.url });
-          if (!isSidebar) window.close();
-        });
-        const emoji = document.createElement('span');
-        emoji.textContent = statusEmoji(pr);
-        const title = document.createElement('span');
-        title.className = 'pr-title';
-        title.textContent = pr.title;
-        const repo = document.createElement('span');
-        repo.className = 'pr-repo';
-        repo.textContent = `${pr.repo}#${pr.number}`;
-        a.append(emoji, title, repo);
-        li.append(a);
-        return li;
-      })
-    );
+    renderPrs(prs);
   }
   if (!updateFooter) return;
   const when = currentSyncState.lastSync
@@ -79,17 +120,22 @@ function render({ updateFooter = true } = {}) {
 }
 
 document.getElementById('syncNow').addEventListener('click', async () => {
+  const request = ++syncRequestSequence;
+  const revision = syncStateRevision;
+  const isCurrent = () => request === syncRequestSequence && revision === syncStateRevision;
   footer.textContent = 'Syncing…';
   try {
     const result = await browser.runtime.sendMessage({ type: 'sync-now' });
+    if (!isCurrent()) return;
     if (result?.skipped) footer.textContent = result.reason;
     else {
       syncStateChanged = true;
+      syncStateLoaded = true;
       currentSyncState = result;
       render();
     }
   } catch (error) {
-    footer.textContent = `Sync failed: ${error?.message ?? String(error)}`;
+    if (isCurrent()) footer.textContent = `Sync failed: ${error?.message ?? String(error)}`;
   }
 });
 
@@ -106,6 +152,8 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
   if (changes.syncState) {
     syncStateChanged = true;
+    syncStateLoaded = true;
+    syncStateRevision += 1;
     currentSyncState = changes.syncState.newValue;
   }
   if (changes.settings || changes.syncState) render({ updateFooter: Boolean(changes.syncState) });
@@ -122,7 +170,9 @@ async function initialize() {
   const stored = await browser.storage.local.get(['settings', 'syncState']);
   if (!settingsChanged) settings = mergeSettings(stored.settings);
   if (!syncStateChanged) currentSyncState = stored.syncState;
+  syncStateLoaded = true;
   render();
 }
 
+render({ updateFooter: false });
 initialize();
