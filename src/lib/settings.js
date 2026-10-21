@@ -63,19 +63,9 @@ function deepMerge(defaults, overrides) {
 
 /** Merge stored (possibly partial/outdated) settings over the defaults. */
 export function mergeSettings(stored) {
-  const merged = deepMerge(DEFAULT_SETTINGS, stored);
-  const hours =
-    typeof merged.badgeMaxAgeHours === 'number' || typeof merged.badgeMaxAgeHours === 'string'
-      ? Number(merged.badgeMaxAgeHours)
-      : 0;
-  merged.badgeMaxAgeHours =
-    Number.isSafeInteger(hours * 3_600_000) && Number.isInteger(hours) && hours >= 0 ? hours : 0;
-  const days =
-    typeof merged.prListMaxAgeDays === 'number' || typeof merged.prListMaxAgeDays === 'string'
-      ? Number(merged.prListMaxAgeDays)
-      : 0;
-  merged.prListMaxAgeDays =
-    Number.isSafeInteger(days * 86_400_000) && Number.isInteger(days) && days >= 0 ? days : 0;
+  const merged = deepMerge(structuredClone(DEFAULT_SETTINGS), stored);
+  merged.badgeMaxAgeHours = normalizeAgeLimit(merged.badgeMaxAgeHours, 3_600_000);
+  merged.prListMaxAgeDays = normalizeAgeLimit(merged.prListMaxAgeDays, 86_400_000);
   merged.displayMode = merged.displayMode === 'sidebar' ? 'sidebar' : 'popup';
   merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);
@@ -84,14 +74,24 @@ export function mergeSettings(stored) {
   return merged;
 }
 
+function normalizeAgeLimit(value, unitMs) {
+  const age = typeof value === 'number' || typeof value === 'string' ? Number(value) : 0;
+  return Number.isSafeInteger(age * unitMs) && Number.isInteger(age) && age >= 0 ? age : 0;
+}
+
 /** Only accept owner/repo names, never additional search qualifiers or URLs. */
 export function isRepoName(value) {
-  return typeof value === 'string' && /^[a-z\d-]+\/[a-z\d_.-]+$/i.test(value);
+  return typeof value === 'string' && /^[a-z\d_-]+\/[a-z\d_.-]+$/i.test(value);
+}
+
+/** Split user input without dropping invalid names before form validation. */
+export function splitRepoEntries(text) {
+  return text.split(/[\s,]+/).filter(Boolean);
 }
 
 /** Accept textarea input or a stored array; normalize and deduplicate names. */
 export function normalizeExcludedRepos(value) {
-  const entries = typeof value === 'string' ? value.split(/[\s,]+/) : value;
+  const entries = typeof value === 'string' ? splitRepoEntries(value) : value;
   if (!Array.isArray(entries)) return [];
   return [
     ...new Set(

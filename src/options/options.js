@@ -1,5 +1,11 @@
 import browser from 'webextension-polyfill';
-import { isRepoName, loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
+import {
+  isRepoName,
+  loadSettings,
+  mergeSettings,
+  saveSettings,
+  splitRepoEntries,
+} from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
 import { supportsSidebar } from '../lib/display.js';
 
@@ -131,7 +137,7 @@ export async function handleSettingsSubmit(event) {
   event.preventDefault();
   updateSyncNumberInputRequirements();
   const excludedRepos = $('syncExcludedRepos');
-  const entries = excludedRepos.value.split(/[\s,]+/).filter(Boolean);
+  const entries = splitRepoEntries(excludedRepos.value);
   excludedRepos.setCustomValidity(
     entries.every(isRepoName)
       ? ''

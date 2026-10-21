@@ -174,7 +174,7 @@ describe('options page submit handling', () => {
     mockState.browser = createBrowserMock();
     const { handleSettingsSubmit } = await importOptionsModule();
     const exclusions = document.getElementById('syncExcludedRepos');
-    exclusions.value = ' Acme/Widgets,\nocto-org/tools\nacme/widgets ';
+    exclusions.value = ' Acme/Widgets,\nocto-org/tools\nacme/widgets Mona_Acme/tools';
 
     await handleSettingsSubmit({
       preventDefault: vi.fn(),
@@ -183,10 +183,12 @@ describe('options page submit handling', () => {
 
     expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
       settings: expect.objectContaining({
-        sync: expect.objectContaining({ excludedRepos: ['acme/widgets', 'octo-org/tools'] }),
+        sync: expect.objectContaining({
+          excludedRepos: ['acme/widgets', 'octo-org/tools', 'mona_acme/tools'],
+        }),
       }),
     });
-    expect(exclusions.value).toBe('acme/widgets\nocto-org/tools');
+    expect(exclusions.value).toBe('acme/widgets\nocto-org/tools\nmona_acme/tools');
   });
 
   it('clears saved exclusions when the field is blank', async () => {

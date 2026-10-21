@@ -1,5 +1,4 @@
 export const POPUP_PATH = 'popup/popup.html';
-export const SIDEBAR_PATH = `${POPUP_PATH}?view=sidebar`;
 
 /** Chrome and Firefox expose different native sidebar APIs. */
 export function supportsSidebar(browser) {

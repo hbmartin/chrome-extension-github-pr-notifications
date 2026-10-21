@@ -18,7 +18,10 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('webextension-polyfill', () => ({ default: mocks.browser }));
-vi.mock('../src/lib/github.js', () => ({ fetchPullRequests: mocks.fetchPullRequests }));
+vi.mock('../src/lib/github.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchPullRequests: mocks.fetchPullRequests,
+}));
 vi.mock('../src/lib/bookmarks.js', () => ({ syncPrBookmarks: mocks.syncPrBookmarks }));
 
 const HOUR = 3_600_000;
@@ -29,6 +32,7 @@ const failingPr = (ageHours) => ({
   updatedAt: new Date(NOW - ageHours * HOUR).toISOString(),
 });
 let stored;
+let syncAlarmTimer;
 
 beforeEach(() => {
   vi.resetModules();
@@ -51,9 +55,23 @@ beforeEach(() => {
   });
   mocks.fetchPullRequests.mockResolvedValue([]);
   mocks.syncPrBookmarks.mockResolvedValue(undefined);
+  syncAlarmTimer = undefined;
+  mocks.browser.alarms.clear.mockImplementation(async (name) => {
+    if (name === SYNC_ALARM_NAME) clearTimeout(syncAlarmTimer);
+  });
+  mocks.browser.alarms.create.mockImplementation(async (name, options) => {
+    if (name !== SYNC_ALARM_NAME) return;
+    clearTimeout(syncAlarmTimer);
+    const fire = async () => {
+      syncAlarmTimer = setTimeout(fire, options.periodInMinutes * 60_000);
+      await mocks.browser.alarms.onAlarm.addListener.mock.calls.at(-1)[0]({ name });
+    };
+    syncAlarmTimer = setTimeout(fire, options.delayInMinutes * 60_000);
+  });
 });
 
 afterEach(() => {
+  vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -138,20 +156,133 @@ describe('background badge refresh', () => {
   });
 
   it('refreshes expired cached PRs and rebuilds alarms after browser startup', async () => {
-    await startBackground();
     vi.setSystemTime(NOW + HOUR);
+    await startBackground();
+    const badgeCalls = mocks.browser.action.setBadgeText.mock.calls.length;
     const listeners = mocks.browser.runtime.onStartup.addListener.mock.calls.map(
       ([listener]) => listener
     );
     await Promise.all(listeners.map((listener) => listener()));
+    expect(mocks.browser.action.setBadgeText).toHaveBeenCalledTimes(badgeCalls);
     expect(mocks.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '1' });
     expect(mocks.browser.alarms.create).toHaveBeenCalledWith(SYNC_ALARM_NAME, {
       periodInMinutes: 10,
       delayInMinutes: 0.5,
     });
-    expect(mocks.browser.alarms.create).toHaveBeenLastCalledWith(BADGE_EXPIRY_ALARM_NAME, {
+    expect(mocks.browser.alarms.create).toHaveBeenCalledWith(BADGE_EXPIRY_ALARM_NAME, {
       when: NOW + 23 * HOUR,
     });
+  });
+
+  it.each([
+    { badgeMaxAgeHours: 48 },
+    { prListMaxAgeDays: 7 },
+    { displayMode: 'sidebar' },
+    { iconTheme: 'plain' },
+    { notifications: { comments: false } },
+  ])(
+    'preserves the existing periodic sync after a display/notification save: %j',
+    async (change) => {
+      await startBackground();
+      await mocks.browser.alarms.create(SYNC_ALARM_NAME, {
+        periodInMinutes: 10,
+        delayInMinutes: 10,
+      });
+      mocks.browser.alarms.create.mockClear();
+      mocks.browser.alarms.clear.mockClear();
+      await changeSettings(change);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(mocks.browser.alarms.clear).not.toHaveBeenCalledWith(SYNC_ALARM_NAME);
+      expect(mocks.browser.alarms.create).not.toHaveBeenCalledWith(
+        SYNC_ALARM_NAME,
+        expect.anything()
+      );
+      expect(mocks.fetchPullRequests).not.toHaveBeenCalled();
+      expect(mocks.syncPrBookmarks).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(570_000);
+      expect(mocks.fetchPullRequests).toHaveBeenCalledOnce();
+      expect(mocks.syncPrBookmarks).toHaveBeenCalledOnce();
+    }
+  );
+
+  it.each([
+    { token: 'replacement-token' },
+    { githubHost: 'github.example.com' },
+    { sync: { folderId: 'other-folder' } },
+    { sync: { role: 'assigned' } },
+    { sync: { state: 'all' } },
+    { sync: { excludedRepos: ['acme/widgets'] } },
+    { sync: { limit: 20 } },
+    { sync: { intervalMinutes: 15 } },
+  ])('schedules one early sync when sync inputs change: %j', async (change) => {
+    await startBackground();
+    mocks.browser.alarms.create.mockClear();
+    await changeSettings({
+      ...change,
+      ...(change.sync && { sync: { ...stored.settings.sync, ...change.sync } }),
+    });
+    expect(
+      mocks.browser.alarms.create.mock.calls.filter(([name]) => name === SYNC_ALARM_NAME)
+    ).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.fetchPullRequests).toHaveBeenCalledOnce();
+    expect(mocks.syncPrBookmarks).toHaveBeenCalledOnce();
+  });
+
+  it('does not reschedule for equivalent normalized settings or reordered exclusions', async () => {
+    stored.settings.sync.excludedRepos = ['acme/widgets', 'octo/tools'];
+    await startBackground();
+    mocks.browser.alarms.clear.mockClear();
+    mocks.browser.alarms.create.mockClear();
+    await changeSettings({
+      githubHost: 'https://GITHUB.COM/',
+      sync: {
+        ...stored.settings.sync,
+        limit: '10',
+        intervalMinutes: '10',
+        excludedRepos: ['OCTO/TOOLS', 'Acme/Widgets', 'acme/widgets'],
+      },
+    });
+    expect(mocks.browser.alarms.clear).not.toHaveBeenCalledWith(SYNC_ALARM_NAME);
+    expect(mocks.browser.alarms.create).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'keeps badge failures separate from a sync error (%s)',
+    async (failFetch) => {
+      const { runSync, refreshBadge } = await startBackground();
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const previousPrs = structuredClone(stored.syncState.prs);
+      if (failFetch) mocks.fetchPullRequests.mockRejectedValueOnce(new Error('Offline'));
+      mocks.browser.action.setBadgeText.mockRejectedValue(new Error('Badge unavailable'));
+      mocks.browser.storage.local.set.mockClear();
+
+      const result = await runSync();
+      expect(result.error).toBe(failFetch ? 'Offline' : null);
+      expect(result.prs).toEqual(failFetch ? previousPrs : []);
+      expect(stored.syncState).toEqual(result);
+      expect(mocks.browser.storage.local.set).toHaveBeenCalledOnce();
+      expect(warning).toHaveBeenCalledWith('Failed to refresh toolbar badge', expect.any(Error));
+
+      mocks.browser.action.setBadgeText.mockResolvedValue(undefined);
+      await refreshBadge();
+      expect(mocks.browser.action.setBadgeText).toHaveBeenLastCalledWith({
+        text: failFetch ? '2' : '',
+      });
+    }
+  );
+
+  it('contains badge errors during worker restoration and badge alarms', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.browser.action.setBadgeText.mockRejectedValue(new Error('Badge unavailable'));
+    await import('../src/background.js');
+    await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+    const listener = mocks.browser.alarms.onAlarm.addListener.mock.calls[0][0];
+    await expect(listener({ name: BADGE_EXPIRY_ALARM_NAME })).resolves.toBeUndefined();
+    expect(warning).toHaveBeenCalledTimes(2);
+    expect(mocks.browser.storage.local.set).not.toHaveBeenCalled();
   });
 
   it('recreates the expiry alarm after a service worker restart', async () => {

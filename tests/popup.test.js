@@ -19,12 +19,28 @@ const pr = {
 };
 const syncState = { prs: [pr], lastSync: 1_700_000_000_000, error: null };
 let storageListener;
+let nextPrNumber;
 
-const agedPr = (ageDays, overrides = {}) => ({
-  ...pr,
-  updatedAt: new Date(NOW - ageDays * DAY).toISOString(),
-  ...overrides,
-});
+const agedPr = (ageDays, overrides = {}) => {
+  const number = nextPrNumber++;
+  return {
+    ...pr,
+    number,
+    url: `https://github.com/acme/widgets/pull/${number}`,
+    updatedAt: new Date(NOW - ageDays * DAY).toISOString(),
+    ...overrides,
+  };
+};
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
 
 async function openView(mode = 'popup') {
   window.history.replaceState(
@@ -38,6 +54,7 @@ async function openView(mode = 'popup') {
 }
 
 beforeEach(() => {
+  nextPrNumber = 43;
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
   vi.spyOn(window, 'addEventListener');
@@ -277,6 +294,119 @@ describe('PR list age filtering', () => {
 });
 
 describe('shared PR view', () => {
+  it.each(['popup', 'sidebar'])(
+    'retains focused links through unchanged redraws in %s',
+    async (mode) => {
+      await openView(mode);
+      const link = document.querySelector('#prList a');
+      link.focus();
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      storageListener({ settings: { newValue: { badgeMaxAgeHours: 24 } } }, 'local');
+      storageListener({ syncState: { newValue: structuredClone(syncState) } }, 'local');
+
+      expect(document.querySelector('#prList a')).toBe(link);
+      expect(document.activeElement).toBe(link);
+      link.click();
+      expect(mock.browser.tabs.create).toHaveBeenCalledExactlyOnceWith({ url: pr.url });
+    }
+  );
+
+  it('updates and reorders retained rows without losing their links or focus', async () => {
+    const other = {
+      ...pr,
+      number: 43,
+      url: 'https://github.com/acme/widgets/pull/43',
+      title: 'Other',
+    };
+    mock.browser.storage.local.get.mockResolvedValue({
+      syncState: { ...syncState, prs: [pr, other] },
+    });
+    await openView('sidebar');
+    const [first, second] = document.querySelectorAll('#prList a');
+    first.focus();
+    const updated = { ...pr, title: 'Updated title', ci: 'FAILURE', repo: 'acme/renamed' };
+    storageListener({ syncState: { newValue: { ...syncState, prs: [other, updated] } } }, 'local');
+    expect([...document.querySelectorAll('#prList a')]).toEqual([second, first]);
+    expect(first.querySelector('.pr-title').textContent).toBe('Updated title');
+    expect(first.querySelector('.pr-repo').textContent).toBe('acme/renamed#42');
+    expect(first.firstElementChild.textContent).toBe('🔴');
+    expect(document.activeElement).toBe(first);
+
+    storageListener({ syncState: { newValue: { ...syncState, prs: [updated] } } }, 'local');
+    expect(second.isConnected).toBe(false);
+    expect(document.querySelector('#prList a')).toBe(first);
+    expect(document.activeElement).toBe(first);
+  });
+
+  it.each([undefined, syncState])(
+    'keeps loading state until the initial cache read finishes (%j)',
+    async (cached) => {
+      const initial = deferred();
+      mock.browser.storage.local.get.mockReturnValue(initial.promise);
+      await openView('sidebar');
+      expect(document.getElementById('prList').textContent).toBe('Loading…');
+      storageListener({ settings: { newValue: { badgeMaxAgeHours: 24 } } }, 'local');
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(document.getElementById('prList').textContent).toBe('Loading…');
+      initial.resolve({ syncState: cached });
+      await Promise.resolve();
+      expect(document.getElementById('prList').textContent).toContain(
+        cached ? pr.title : 'No sync yet.'
+      );
+    }
+  );
+
+  it.each(['success', 'skipped', 'error'])(
+    'ignores a late manual-sync %s after a storage update',
+    async (outcome) => {
+      const pending = deferred();
+      mock.browser.runtime.sendMessage.mockReturnValue(pending.promise);
+      await openView('sidebar');
+      document.getElementById('syncNow').click();
+      const newer = { ...syncState, lastSync: NOW, prs: [{ ...pr, title: 'Newer PR' }] };
+      storageListener({ syncState: { newValue: newer } }, 'local');
+      const footer = document.getElementById('footer').textContent;
+      if (outcome === 'error') pending.reject(new Error('Old request failed'));
+      else
+        pending.resolve(
+          outcome === 'skipped' ? { skipped: true, reason: 'Old skip reason' } : syncState
+        );
+      await Promise.resolve();
+      expect(document.querySelector('.pr-title').textContent).toBe('Newer PR');
+      expect(document.getElementById('footer').textContent).toBe(footer);
+    }
+  );
+
+  it('keeps removed cache state when an older manual reply arrives', async () => {
+    const pending = deferred();
+    mock.browser.runtime.sendMessage.mockReturnValue(pending.promise);
+    await openView('sidebar');
+    document.getElementById('syncNow').click();
+    storageListener({ syncState: {} }, 'local');
+    pending.resolve(syncState);
+    await Promise.resolve();
+    expect(document.getElementById('prList').textContent).toContain('No sync yet.');
+    expect(document.getElementById('footer').textContent).toBe('');
+  });
+
+  it('keeps the latest manual request result when requests finish out of order', async () => {
+    const first = deferred();
+    const second = deferred();
+    mock.browser.runtime.sendMessage
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    await openView('sidebar');
+    document.getElementById('syncNow').click();
+    document.getElementById('syncNow').click();
+    second.resolve({ ...syncState, prs: [{ ...pr, title: 'Latest request' }] });
+    await Promise.resolve();
+    first.resolve(syncState);
+    await Promise.resolve();
+    expect(document.querySelector('.pr-title').textContent).toBe('Latest request');
+  });
+
   it.each(['popup', 'sidebar'])('renders saved PRs in %s mode', async (mode) => {
     await openView(mode);
     expect(document.querySelector('.pr-title').textContent).toBe(pr.title);

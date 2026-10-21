@@ -50,6 +50,11 @@ describe('buildSearchQuery', () => {
       })
     ).toBe('is:pr author:@me sort:updated-desc -repo:acme/widgets');
   });
+
+  it('includes repositories owned by enterprise-managed accounts in the exclusion query', () => {
+    const settings = mergeSettings({ sync: { excludedRepos: ['Mona_Acme/tools'] } });
+    expect(buildSearchQuery(settings.sync)).toContain(' -repo:mona_acme/tools');
+  });
 });
 
 describe('graphqlEndpoint', () => {
