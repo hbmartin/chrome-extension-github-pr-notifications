@@ -32,6 +32,7 @@ function setupDom() {
         <option value="sidebar">Sidebar</option>
       </select>
       <p id="displayModeHint"></p>
+      <input type="number" id="prListMaxAgeDays" min="0" step="1" />
       <input id="token" />
       <input id="githubHost" />
       <input type="checkbox" id="notifyCiSuccess" />
@@ -338,6 +339,51 @@ describe('options page badge hours', () => {
     const form = document.getElementById('settingsForm');
     form.reportValidity = vi.fn();
     document.getElementById('badgeMaxAgeHours').value = value;
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+    expect(form.reportValidity).toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('options page PR list days', () => {
+  it.each([undefined, 7])('restores saved list days: %s', async (days) => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { prListMaxAgeDays: days } });
+    await importOptionsModule();
+    expect(document.getElementById('prListMaxAgeDays').value).toBe(String(days ?? 0));
+  });
+
+  it.each(['7', '0', ''])(
+    'saves list days without changing badge or sync settings: %s',
+    async (value) => {
+      mockState.browser = createBrowserMock();
+      mockState.browser.storage.local.get.mockResolvedValue({
+        settings: { badgeMaxAgeHours: 24, sync: { excludedRepos: ['acme/widgets'] } },
+      });
+      const { handleSettingsSubmit } = await importOptionsModule();
+      const input = document.getElementById('prListMaxAgeDays');
+      input.value = value;
+      await handleSettingsSubmit({
+        preventDefault: vi.fn(),
+        currentTarget: document.getElementById('settingsForm'),
+      });
+      expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+        settings: expect.objectContaining({
+          prListMaxAgeDays: Number(value),
+          badgeMaxAgeHours: 24,
+          sync: expect.objectContaining({ excludedRepos: ['acme/widgets'] }),
+        }),
+      });
+      expect(input.value).toBe(String(Number(value)));
+    }
+  );
+
+  it.each(['-1', '1.5'])('rejects invalid days even when sync is disabled: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+    document.getElementById('prListMaxAgeDays').value = value;
     await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
     expect(form.reportValidity).toHaveBeenCalled();
     expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();

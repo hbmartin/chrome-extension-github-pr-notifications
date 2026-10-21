@@ -66,6 +66,7 @@ async function restore() {
   $('notifyReviews').checked = settings.notifications.reviews;
   $('iconTheme').value = settings.iconTheme;
   $('badgeMaxAgeHours').value = settings.badgeMaxAgeHours;
+  $('prListMaxAgeDays').value = settings.prListMaxAgeDays;
   $('syncEnabled').checked = settings.sync.enabled;
   updateSyncNumberInputRequirements(settings.sync.enabled);
   $('syncRole').value = settings.sync.role;
@@ -89,6 +90,7 @@ function collect() {
     },
     iconTheme: $('iconTheme').value,
     badgeMaxAgeHours: optionalNumberInputValue('badgeMaxAgeHours'),
+    prListMaxAgeDays: optionalNumberInputValue('prListMaxAgeDays'),
     sync: {
       enabled: $('syncEnabled').checked,
       folderId: $('syncFolder').value,
@@ -103,6 +105,7 @@ function collect() {
 
 function reflectSanitizedFields(settings) {
   $('githubHost').value = settings.githubHost;
+  $('prListMaxAgeDays').value = settings.prListMaxAgeDays;
   $('badgeMaxAgeHours').value = settings.badgeMaxAgeHours;
   $('syncExcludedRepos').value = settings.sync.excludedRepos.join('\n');
   $('syncLimit').value = settings.sync.limit;

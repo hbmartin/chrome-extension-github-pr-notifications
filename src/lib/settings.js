@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS = {
   badgeMaxAgeHours: 0,
   // What the toolbar icon opens: 'popup' | 'sidebar'.
   displayMode: 'popup',
+  // Hide PRs in the popup/sidebar after this many days without updates; 0 shows all.
+  prListMaxAgeDays: 0,
   sync: {
     enabled: false,
     // Bookmark folder that PR bookmarks are synced into.
@@ -68,6 +70,12 @@ export function mergeSettings(stored) {
       : 0;
   merged.badgeMaxAgeHours =
     Number.isSafeInteger(hours * 3_600_000) && Number.isInteger(hours) && hours >= 0 ? hours : 0;
+  const days =
+    typeof merged.prListMaxAgeDays === 'number' || typeof merged.prListMaxAgeDays === 'string'
+      ? Number(merged.prListMaxAgeDays)
+      : 0;
+  merged.prListMaxAgeDays =
+    Number.isSafeInteger(days * 86_400_000) && Number.isInteger(days) && days >= 0 ? days : 0;
   merged.displayMode = merged.displayMode === 'sidebar' ? 'sidebar' : 'popup';
   merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);

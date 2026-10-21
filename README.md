@@ -51,6 +51,15 @@ you open a PR and updates as background sync finishes. Its side is controlled by
 If the browser does not support native sidebars, the extension continues using the popup and
 the Sidebar choice is disabled.
 
+To hide inactive PRs from the popup and sidebar, set **Options → Display → Hide PRs not updated
+within the past (days)**, for example `7`, then save. A day is a rolling 24 hours since the PR's
+last update. The list updates immediately and automatically hides PRs as they age out. Enter `0`
+or leave the field blank to show all PRs again (the default). This changes only the displayed
+list: bookmarks, badge counts, notifications, and the unfiltered cache are unaffected. The list
+filters the PRs already fetched, so it can contain fewer than the configured maximum without
+fetching replacements. Cached PRs without a valid update timestamp stay hidden while filtering
+is enabled, until the next successful sync supplies timestamps.
+
 On each sync, PR bookmarks in the folder are removed and re-created from the API response;
 anything else you keep in the folder (other bookmarks, subfolders) is left untouched.
 

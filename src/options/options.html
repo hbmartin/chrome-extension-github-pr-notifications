@@ -45,6 +45,20 @@
             Choose what opens when you click the toolbar icon. Save to apply; existing views stay
             open.
           </p>
+
+          <label for="prListMaxAgeDays">Hide PRs not updated within the past (days)</label>
+          <input
+            type="number"
+            id="prListMaxAgeDays"
+            min="0"
+            step="1"
+            aria-describedby="prListMaxAgeDaysHint"
+          />
+          <p class="hint" id="prListMaxAgeDaysHint">
+            Based on each PR's last update. Enter whole days, or 0 (or leave blank) to show all PRs.
+            This hides PRs only in the popup and sidebar; bookmarks, badge counts, and notifications
+            are unaffected.
+          </p>
         </section>
 
         <section>

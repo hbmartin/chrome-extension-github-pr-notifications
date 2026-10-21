@@ -135,6 +135,53 @@ describe('badge age setting', () => {
   });
 });
 
+describe('PR list age setting', () => {
+  it('defaults existing settings to showing every PR', () => {
+    expect(mergeSettings({ badgeMaxAgeHours: 24 }).prListMaxAgeDays).toBe(0);
+  });
+
+  it.each([1, 7, '30'])('accepts whole days: %s', (value) => {
+    expect(mergeSettings({ prListMaxAgeDays: value }).prListMaxAgeDays).toBe(Number(value));
+  });
+
+  it.each([
+    undefined,
+    null,
+    '',
+    'invalid',
+    -1,
+    1.5,
+    NaN,
+    Infinity,
+    Number.MAX_SAFE_INTEGER,
+    true,
+    {},
+    [7],
+  ])('disables list filtering for blank or invalid stored days: %j', (value) => {
+    expect(mergeSettings({ prListMaxAgeDays: value }).prListMaxAgeDays).toBe(0);
+  });
+
+  it('persists the list limit independently of badge and sync settings', async () => {
+    let stored;
+    const storage = {
+      set: vi.fn(async (value) => {
+        stored = value;
+      }),
+      get: vi.fn(async () => stored),
+    };
+    await saveSettings(storage, {
+      prListMaxAgeDays: 7,
+      badgeMaxAgeHours: 24,
+      sync: { limit: 25, excludedRepos: ['acme/widgets'] },
+    });
+    const settings = await loadSettings(storage);
+    expect(settings.prListMaxAgeDays).toBe(7);
+    expect(settings.badgeMaxAgeHours).toBe(24);
+    expect(settings.sync.limit).toBe(25);
+    expect(settings.sync.excludedRepos).toEqual(['acme/widgets']);
+  });
+});
+
 describe('clampLimit', () => {
   it('defaults to 10 for garbage input', () => {
     expect(clampLimit('nope')).toBe(10);
