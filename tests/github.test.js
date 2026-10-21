@@ -28,6 +28,28 @@ describe('buildSearchQuery', () => {
       'is:pr author:@me sort:updated-desc'
     );
   });
+
+  it('excludes multiple repositories while preserving the role and state', () => {
+    expect(
+      buildSearchQuery({
+        role: 'review-requested',
+        state: 'closed',
+        excludedRepos: [' Acme/Widgets ', 'octo-org/repo_name.js', 'acme/widgets'],
+      })
+    ).toBe(
+      'is:pr review-requested:@me sort:updated-desc is:closed -repo:acme/widgets -repo:octo-org/repo_name.js'
+    );
+  });
+
+  it('ignores invalid exclusions and supports exclusions across all states', () => {
+    expect(
+      buildSearchQuery({
+        role: 'author',
+        state: 'all',
+        excludedRepos: ['acme/widgets', 'acme/other is:closed'],
+      })
+    ).toBe('is:pr author:@me sort:updated-desc -repo:acme/widgets');
+  });
 });
 
 describe('graphqlEndpoint', () => {
@@ -63,6 +85,7 @@ describe('normalizePullRequest', () => {
       url: 'https://github.com/acme/widgets/pull/7',
       state: 'OPEN',
       isDraft: false,
+      updatedAt: '2026-10-20T12:00:00Z',
       repository: { nameWithOwner: 'acme/widgets' },
       commits: { nodes: [{ commit: { statusCheckRollup: { state: 'PENDING' } } }] },
     };
@@ -73,6 +96,7 @@ describe('normalizePullRequest', () => {
       state: 'OPEN',
       isDraft: false,
       repo: 'acme/widgets',
+      updatedAt: '2026-10-20T12:00:00Z',
       ci: 'PENDING',
     });
   });
@@ -87,6 +111,7 @@ describe('normalizePullRequest', () => {
       commits: { nodes: [{ commit: { statusCheckRollup: null } }] },
     };
     expect(normalizePullRequest(node).ci).toBeNull();
+    expect(normalizePullRequest(node).updatedAt).toBeNull();
   });
 });
 
@@ -111,6 +136,7 @@ describe('fetchPullRequests', () => {
                 url: 'https://github.com/a/b/pull/3',
                 state: 'MERGED',
                 isDraft: false,
+                updatedAt: '2026-10-20T12:00:00Z',
                 repository: { nameWithOwner: 'a/b' },
                 commits: { nodes: [] },
               },
@@ -126,6 +152,7 @@ describe('fetchPullRequests', () => {
     expect(url).toBe('https://api.github.com/graphql');
     expect(init.headers.Authorization).toBe('Bearer tok');
     const body = JSON.parse(init.body);
+    expect(body.query).toMatch(/\bupdatedAt\b/);
     expect(body.variables).toEqual({
       searchQuery: 'is:pr author:@me sort:updated-desc is:open',
       limit: 5,
@@ -134,6 +161,25 @@ describe('fetchPullRequests', () => {
     // Empty (non-PR) nodes are dropped.
     expect(prs).toHaveLength(1);
     expect(prs[0].state).toBe('MERGED');
+    expect(prs[0].updatedAt).toBe('2026-10-20T12:00:00Z');
+  });
+
+  it('sends repository exclusions to GitHub without reducing the requested PR limit', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { search: { nodes: [] } } }),
+    });
+    await fetchPullRequests(
+      mergeSettings({ token: 'tok', sync: { limit: 5, excludedRepos: ['acme/widgets'] } }),
+      fetchImpl
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body.variables).toEqual({
+      searchQuery: 'is:pr author:@me sort:updated-desc is:open -repo:acme/widgets',
+      limit: 5,
+    });
   });
 
   it('throws on HTTP errors', async () => {

@@ -4,6 +4,7 @@
  */
 
 export const SYNC_ALARM_NAME = 'pr-bookmark-sync';
+export const BADGE_EXPIRY_ALARM_NAME = 'pr-badge-expiry';
 
 export const DEFAULT_SETTINGS = {
   // GitHub personal access token. Required for bookmark sync; never sent
@@ -19,6 +20,12 @@ export const DEFAULT_SETTINGS = {
   },
   // 'octocat' → random themed Octodex icons; 'plain' → the extension icon.
   iconTheme: 'octocat',
+  // Count failing PRs updated within this many hours; 0 means all time.
+  badgeMaxAgeHours: 0,
+  // What the toolbar icon opens: 'popup' | 'sidebar'.
+  displayMode: 'popup',
+  // Hide PRs in the popup/sidebar after this many days without updates; 0 shows all.
+  prListMaxAgeDays: 0,
   sync: {
     enabled: false,
     // Bookmark folder that PR bookmarks are synced into.
@@ -28,6 +35,8 @@ export const DEFAULT_SETTINGS = {
     role: 'author',
     // 'open' | 'closed' | 'all'
     state: 'open',
+    // Repositories to omit from PR search, in owner/repo format.
+    excludedRepos: [],
     // Max number of PRs fetched (single request, no pagination).
     limit: 10,
     intervalMinutes: 10,
@@ -55,10 +64,43 @@ function deepMerge(defaults, overrides) {
 /** Merge stored (possibly partial/outdated) settings over the defaults. */
 export function mergeSettings(stored) {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
+  const hours =
+    typeof merged.badgeMaxAgeHours === 'number' || typeof merged.badgeMaxAgeHours === 'string'
+      ? Number(merged.badgeMaxAgeHours)
+      : 0;
+  merged.badgeMaxAgeHours =
+    Number.isSafeInteger(hours * 3_600_000) && Number.isInteger(hours) && hours >= 0 ? hours : 0;
+  const days =
+    typeof merged.prListMaxAgeDays === 'number' || typeof merged.prListMaxAgeDays === 'string'
+      ? Number(merged.prListMaxAgeDays)
+      : 0;
+  merged.prListMaxAgeDays =
+    Number.isSafeInteger(days * 86_400_000) && Number.isInteger(days) && days >= 0 ? days : 0;
+  merged.displayMode = merged.displayMode === 'sidebar' ? 'sidebar' : 'popup';
+  merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);
   const interval = Math.floor(Number(merged.sync.intervalMinutes));
   merged.sync.intervalMinutes = Number.isFinite(interval) ? Math.max(1, interval) : 10;
   return merged;
+}
+
+/** Only accept owner/repo names, never additional search qualifiers or URLs. */
+export function isRepoName(value) {
+  return typeof value === 'string' && /^[a-z\d-]+\/[a-z\d_.-]+$/i.test(value);
+}
+
+/** Accept textarea input or a stored array; normalize and deduplicate names. */
+export function normalizeExcludedRepos(value) {
+  const entries = typeof value === 'string' ? value.split(/[\s,]+/) : value;
+  if (!Array.isArray(entries)) return [];
+  return [
+    ...new Set(
+      entries
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(isRepoName)
+    ),
+  ];
 }
 
 /** GitHub's GraphQL API caps `first` at 100; keep the value sane. */

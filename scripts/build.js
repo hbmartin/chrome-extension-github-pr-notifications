@@ -32,8 +32,15 @@ baseManifest.version = version;
 
 const targets = {
   chrome: (manifest) => manifest,
-  firefox: (manifest) => ({
+  firefox: ({ side_panel, ...manifest }) => ({
     ...manifest,
+    permissions: manifest.permissions.filter((permission) => permission !== 'sidePanel'),
+    sidebar_action: {
+      default_panel: side_panel.default_path,
+      default_title: manifest.action.default_title,
+      default_icon: manifest.action.default_icon,
+      open_at_install: false,
+    },
     // Firefox MV3 uses an event page instead of a service worker.
     background: { scripts: [manifest.background.service_worker] },
     browser_specific_settings: {

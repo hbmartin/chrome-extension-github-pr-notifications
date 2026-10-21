@@ -27,6 +27,12 @@ vi.mock('webextension-polyfill', () => ({
 function setupDom() {
   document.body.innerHTML = `
     <form id="settingsForm">
+      <select id="displayMode">
+        <option value="popup">Popup</option>
+        <option value="sidebar">Sidebar</option>
+      </select>
+      <p id="displayModeHint"></p>
+      <input type="number" id="prListMaxAgeDays" min="0" step="1" />
       <input id="token" />
       <input id="githubHost" />
       <input type="checkbox" id="notifyCiSuccess" />
@@ -38,8 +44,10 @@ function setupDom() {
       <select id="syncFolder"></select>
       <select id="syncRole"><option value="author">Author</option></select>
       <select id="syncState"><option value="open">Open</option></select>
+      <textarea id="syncExcludedRepos"></textarea>
       <input type="number" id="syncLimit" min="1" max="100" step="1" />
       <input type="number" id="syncInterval" min="1" step="1" />
+      <input type="number" id="badgeMaxAgeHours" min="0" step="1" />
       <button type="submit" id="save">Save</button>
       <button type="button" id="syncNow">Sync now</button>
       <button type="button" id="createFolder">New folder</button>
@@ -51,6 +59,8 @@ function setupDom() {
 
 function createBrowserMock(overrides = {}) {
   return {
+    sidePanel: overrides.sidePanel,
+    sidebarAction: overrides.sidebarAction,
     storage: {
       local: {
         get: vi.fn(async () => ({ settings: undefined })),
@@ -92,6 +102,138 @@ afterEach(() => {
 });
 
 describe('options page submit handling', () => {
+  it.each(['chrome', 'firefox'])('restores sidebar mode on %s', async (target) => {
+    mockState.browser = createBrowserMock(
+      target === 'chrome'
+        ? { sidePanel: { setPanelBehavior: vi.fn() } }
+        : { sidebarAction: { toggle: vi.fn() } }
+    );
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
+    await importOptionsModule();
+
+    expect(document.getElementById('displayMode').value).toBe('sidebar');
+    expect(document.querySelector('option[value="sidebar"]').disabled).toBe(false);
+  });
+
+  it('disables sidebar mode when no native sidebar API is available', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
+    const { handleSettingsSubmit } = await importOptionsModule();
+
+    expect(document.querySelector('option[value="sidebar"]').disabled).toBe(true);
+    expect(document.getElementById('displayMode').value).toBe('popup');
+    expect(document.getElementById('displayModeHint').textContent).toContain('unavailable');
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ displayMode: 'popup' }),
+    });
+  });
+
+  it.each(['popup', 'sidebar'])('saves %s mode without losing other preferences', async (mode) => {
+    mockState.browser = createBrowserMock({ sidePanel: { setPanelBehavior: vi.fn() } });
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: {
+        displayMode: 'sidebar',
+        token: 'secret',
+        notifications: { comments: false },
+        sync: { excludedRepos: ['acme/widgets'] },
+      },
+    });
+    const { handleSettingsSubmit } = await importOptionsModule();
+    document.getElementById('displayMode').value = mode;
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        displayMode: mode,
+        token: 'secret',
+        notifications: expect.objectContaining({ comments: false }),
+        sync: expect.objectContaining({ excludedRepos: ['acme/widgets'] }),
+      }),
+    });
+  });
+
+  it('restores repository exclusions from saved settings', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { sync: { excludedRepos: ['acme/widgets', 'octo-org/tools'] } },
+    });
+    await importOptionsModule();
+
+    expect(document.getElementById('syncExcludedRepos').value).toBe('acme/widgets\nocto-org/tools');
+  });
+
+  it('saves normalized exclusions and reflects them in the form', async () => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const exclusions = document.getElementById('syncExcludedRepos');
+    exclusions.value = ' Acme/Widgets,\nocto-org/tools\nacme/widgets ';
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ excludedRepos: ['acme/widgets', 'octo-org/tools'] }),
+      }),
+    });
+    expect(exclusions.value).toBe('acme/widgets\nocto-org/tools');
+  });
+
+  it('clears saved exclusions when the field is blank', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { sync: { excludedRepos: ['acme/widgets'] } },
+    });
+    const { handleSettingsSubmit } = await importOptionsModule();
+    document.getElementById('syncExcludedRepos').value = '';
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ excludedRepos: [] }),
+      }),
+    });
+  });
+
+  it.each(['widgets', 'https://github.com/acme/widgets', 'acme/*', 'acme/widgets is:closed'])(
+    'rejects invalid repository input: %s',
+    async (value) => {
+      mockState.browser = createBrowserMock();
+      const { handleSettingsSubmit } = await importOptionsModule();
+      const form = document.getElementById('settingsForm');
+      form.reportValidity = vi.fn();
+      const exclusions = document.getElementById('syncExcludedRepos');
+      exclusions.value = value;
+
+      await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+
+      expect(exclusions.validity.customError).toBe(true);
+      expect(form.reportValidity).toHaveBeenCalled();
+      expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+
+      exclusions.value = 'acme/widgets';
+      exclusions.dispatchEvent(new Event('input'));
+      expect(exclusions.validity.customError).toBe(false);
+
+      await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+      expect(mockState.browser.storage.local.set).toHaveBeenCalledOnce();
+    }
+  );
+
   it('reflects sanitized sync values before saving', async () => {
     mockState.browser = createBrowserMock();
     const { handleSettingsSubmit } = await importOptionsModule();
@@ -161,6 +303,88 @@ describe('options page submit handling', () => {
 
     await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
 
+    expect(form.reportValidity).toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('options page badge hours', () => {
+  it.each([undefined, 24])('restores badge hours from storage: %s', async (hours) => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { badgeMaxAgeHours: hours },
+    });
+    await importOptionsModule();
+    expect(document.getElementById('badgeMaxAgeHours').value).toBe(String(hours ?? 0));
+  });
+
+  it.each(['24', '0', ''])('saves badge hours or all time: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const input = document.getElementById('badgeMaxAgeHours');
+    input.value = value;
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ badgeMaxAgeHours: Number(value) }),
+    });
+    expect(input.value).toBe(String(Number(value)));
+  });
+
+  it.each(['-1', '1.5'])('rejects invalid hours even when sync is disabled: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+    document.getElementById('badgeMaxAgeHours').value = value;
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+    expect(form.reportValidity).toHaveBeenCalled();
+    expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('options page PR list days', () => {
+  it.each([undefined, 7])('restores saved list days: %s', async (days) => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { prListMaxAgeDays: days } });
+    await importOptionsModule();
+    expect(document.getElementById('prListMaxAgeDays').value).toBe(String(days ?? 0));
+  });
+
+  it.each(['7', '0', ''])(
+    'saves list days without changing badge or sync settings: %s',
+    async (value) => {
+      mockState.browser = createBrowserMock();
+      mockState.browser.storage.local.get.mockResolvedValue({
+        settings: { badgeMaxAgeHours: 24, sync: { excludedRepos: ['acme/widgets'] } },
+      });
+      const { handleSettingsSubmit } = await importOptionsModule();
+      const input = document.getElementById('prListMaxAgeDays');
+      input.value = value;
+      await handleSettingsSubmit({
+        preventDefault: vi.fn(),
+        currentTarget: document.getElementById('settingsForm'),
+      });
+      expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+        settings: expect.objectContaining({
+          prListMaxAgeDays: Number(value),
+          badgeMaxAgeHours: 24,
+          sync: expect.objectContaining({ excludedRepos: ['acme/widgets'] }),
+        }),
+      });
+      expect(input.value).toBe(String(Number(value)));
+    }
+  );
+
+  it.each(['-1', '1.5'])('rejects invalid days even when sync is disabled: %s', async (value) => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const form = document.getElementById('settingsForm');
+    form.reportValidity = vi.fn();
+    document.getElementById('prListMaxAgeDays').value = value;
+    await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
     expect(form.reportValidity).toHaveBeenCalled();
     expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
   });

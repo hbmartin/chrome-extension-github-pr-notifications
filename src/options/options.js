@@ -1,6 +1,7 @@
 import browser from 'webextension-polyfill';
-import { loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
+import { isRepoName, loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
+import { supportsSidebar } from '../lib/display.js';
 
 const $ = (id) => document.getElementById(id);
 const syncNumberInputIds = ['syncLimit', 'syncInterval'];
@@ -50,6 +51,13 @@ async function populateFolders(selectedId) {
 
 async function restore() {
   const settings = await loadSettings(browser.storage.local);
+  const sidebarAvailable = supportsSidebar(browser);
+  $('displayMode').querySelector('option[value="sidebar"]').disabled = !sidebarAvailable;
+  $('displayMode').value = sidebarAvailable ? settings.displayMode : 'popup';
+  if (!sidebarAvailable) {
+    $('displayModeHint').textContent =
+      'Sidebar is unavailable in this browser. The toolbar opens a popup.';
+  }
   $('token').value = settings.token;
   $('githubHost').value = settings.githubHost;
   $('notifyCiSuccess').checked = settings.notifications.ciSuccess;
@@ -57,10 +65,13 @@ async function restore() {
   $('notifyComments').checked = settings.notifications.comments;
   $('notifyReviews').checked = settings.notifications.reviews;
   $('iconTheme').value = settings.iconTheme;
+  $('badgeMaxAgeHours').value = settings.badgeMaxAgeHours;
+  $('prListMaxAgeDays').value = settings.prListMaxAgeDays;
   $('syncEnabled').checked = settings.sync.enabled;
   updateSyncNumberInputRequirements(settings.sync.enabled);
   $('syncRole').value = settings.sync.role;
   $('syncState').value = settings.sync.state;
+  $('syncExcludedRepos').value = settings.sync.excludedRepos.join('\n');
   $('syncLimit').value = settings.sync.limit;
   $('syncInterval').value = settings.sync.intervalMinutes;
   await populateFolders(settings.sync.folderId);
@@ -68,6 +79,7 @@ async function restore() {
 
 function collect() {
   return {
+    displayMode: supportsSidebar(browser) ? $('displayMode').value : 'popup',
     token: $('token').value.trim(),
     githubHost: normalizeGitHubHost($('githubHost').value),
     notifications: {
@@ -77,11 +89,14 @@ function collect() {
       reviews: $('notifyReviews').checked,
     },
     iconTheme: $('iconTheme').value,
+    badgeMaxAgeHours: optionalNumberInputValue('badgeMaxAgeHours'),
+    prListMaxAgeDays: optionalNumberInputValue('prListMaxAgeDays'),
     sync: {
       enabled: $('syncEnabled').checked,
       folderId: $('syncFolder').value,
       role: $('syncRole').value,
       state: $('syncState').value,
+      excludedRepos: $('syncExcludedRepos').value,
       limit: optionalNumberInputValue('syncLimit'),
       intervalMinutes: optionalNumberInputValue('syncInterval'),
     },
@@ -90,6 +105,9 @@ function collect() {
 
 function reflectSanitizedFields(settings) {
   $('githubHost').value = settings.githubHost;
+  $('prListMaxAgeDays').value = settings.prListMaxAgeDays;
+  $('badgeMaxAgeHours').value = settings.badgeMaxAgeHours;
+  $('syncExcludedRepos').value = settings.sync.excludedRepos.join('\n');
   $('syncLimit').value = settings.sync.limit;
   $('syncInterval').value = settings.sync.intervalMinutes;
 }
@@ -112,6 +130,13 @@ async function ensureHostPermission(githubHost) {
 export async function handleSettingsSubmit(event) {
   event.preventDefault();
   updateSyncNumberInputRequirements();
+  const excludedRepos = $('syncExcludedRepos');
+  const entries = excludedRepos.value.split(/[\s,]+/).filter(Boolean);
+  excludedRepos.setCustomValidity(
+    entries.every(isRepoName)
+      ? ''
+      : 'Enter repositories as owner/repo, separated by commas or new lines.'
+  );
   if (!event.currentTarget.checkValidity()) {
     event.currentTarget.reportValidity();
     return;
@@ -173,4 +198,7 @@ export async function handleCreateFolder() {
 $('settingsForm').addEventListener('submit', handleSettingsSubmit);
 $('createFolder').addEventListener('click', handleCreateFolder);
 $('syncEnabled').addEventListener('change', () => updateSyncNumberInputRequirements());
+$('syncExcludedRepos').addEventListener('input', () =>
+  $('syncExcludedRepos').setCustomValidity('')
+);
 restore();

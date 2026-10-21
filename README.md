@@ -27,10 +27,13 @@ automatic syncing of your PRs into a bookmark folder.
   | 🟣    | merged                         |
   | ⚫    | closed without merging         |
 
-- **Toolbar popup** — your synced PRs at a glance, with a badge counting failing PRs.
+- **Popup or sidebar** — view your synced PRs in a compact toolbar popup or a persistent native
+  sidebar in Chrome and Firefox, with a badge counting failing PRs and an optional limit based
+  on how recently each PR was updated.
 - **Configurable** — which events notify, which PRs to sync (opened by you / assigned /
   mentioned / review-requested; open, closed, or all), how many (default 10, single request,
-  no pagination), how often, notification icon style, and GitHub Enterprise hosts.
+  no pagination), repositories to exclude, how often, notification icon style, and GitHub
+  Enterprise hosts.
 
 ## Setup
 
@@ -41,8 +44,37 @@ automatic syncing of your PRs into a bookmark folder.
    and only ever sent to your GitHub host.
 3. Enable **PR bookmark sync**, pick (or create) a bookmark folder, and save.
 
+Choose **Options → Display → Display mode → Popup / Sidebar**, then **Save** to choose what
+the next toolbar-icon click opens. Popup is the default, and the choice is stored locally for
+all windows of that browser. Saving leaves existing views open. The sidebar stays open when
+you open a PR and updates as background sync finishes. Its side is controlled by browser settings.
+If the browser does not support native sidebars, the extension continues using the popup and
+the Sidebar choice is disabled.
+
+To hide inactive PRs from the popup and sidebar, set **Options → Display → Hide PRs not updated
+within the past (days)**, for example `7`, then save. A day is a rolling 24 hours since the PR's
+last update. The list updates immediately and automatically hides PRs as they age out. Enter `0`
+or leave the field blank to show all PRs again (the default). This changes only the displayed
+list: bookmarks, badge counts, notifications, and the unfiltered cache are unaffected. The list
+filters the PRs already fetched, so it can contain fewer than the configured maximum without
+fetching replacements. Cached PRs without a valid update timestamp stay hidden while filtering
+is enabled, until the next successful sync supplies timestamps.
+
 On each sync, PR bookmarks in the folder are removed and re-created from the API response;
 anything else you keep in the folder (other bookmarks, subfolders) is left untouched.
+
+To hide PRs from certain repositories, enter their `owner/repo` names in **Options → PR
+bookmark sync → Excluded repositories**, one per line or separated by commas. Save, then
+click **Sync now** (or wait for the next sync) to update the popup, bookmarks, and badge.
+Exclusions apply before the maximum PR count. Clear the field to include all repositories again.
+
+To limit the badge to recent activity, set **Options → Toolbar badge → Count PRs updated within
+the past (hours)**, for example `24`, then save. Only open PRs with failing checks whose last
+update is less than that many hours ago count toward the badge. The count updates immediately
+from cached PRs and automatically decreases as PRs age out, even between syncs. Enter `0` or
+leave the field blank to count all failing PRs (the default). This setting affects only the badge;
+the popup, bookmarks, and notifications keep their existing behavior. Previously cached PRs
+without timestamps become eligible for the time filter after the next successful sync.
 
 CI/comment notifications need no token — they work by watching PR pages you have open in a tab.
 Notifications are per-tab, so a PR must be open in some tab for you to get them; bookmark sync

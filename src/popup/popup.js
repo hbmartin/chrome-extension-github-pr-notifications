@@ -1,8 +1,19 @@
 import browser from 'webextension-polyfill';
 import { statusEmoji } from '../lib/emoji.js';
+import { getPrListState } from '../lib/pr-list.js';
+import { mergeSettings } from '../lib/settings.js';
 
 const list = document.getElementById('prList');
 const footer = document.getElementById('footer');
+const isSidebar = new URLSearchParams(window.location.search).get('view') === 'sidebar';
+document.body.classList.toggle('sidebar', isSidebar);
+
+const MAX_TIMEOUT_MS = 2_147_483_647;
+let settings = mergeSettings();
+let currentSyncState;
+let expiryTimer;
+let syncStateChanged = false;
+let settingsChanged = false;
 
 function renderEmpty(text) {
   const li = document.createElement('li');
@@ -11,15 +22,28 @@ function renderEmpty(text) {
   list.replaceChildren(li);
 }
 
-function render(syncState) {
-  if (!syncState) {
+function render({ updateFooter = true } = {}) {
+  clearTimeout(expiryTimer);
+  expiryTimer = undefined;
+  if (!currentSyncState) {
     renderEmpty('No sync yet. Enable PR bookmark sync in Options, or hit ↻.');
-    footer.textContent = '';
+    if (updateFooter) footer.textContent = '';
     return;
   }
-  const prs = syncState.prs ?? [];
+  const cachedPrs = currentSyncState.prs ?? [];
+  const { prs, nextExpiry } = getPrListState(cachedPrs, settings.prListMaxAgeDays);
+  if (nextExpiry !== null) {
+    expiryTimer = setTimeout(
+      () => render({ updateFooter: false }),
+      Math.min(Math.max(0, nextExpiry - Date.now()), MAX_TIMEOUT_MS)
+    );
+  }
   if (prs.length === 0) {
-    renderEmpty('No pull requests found.');
+    renderEmpty(
+      cachedPrs.length > 0 && settings.prListMaxAgeDays > 0
+        ? `No PRs updated within the past ${settings.prListMaxAgeDays} ${settings.prListMaxAgeDays === 1 ? 'day' : 'days'}.`
+        : 'No pull requests found.'
+    );
   } else {
     list.replaceChildren(
       ...prs.map((pr) => {
@@ -29,7 +53,7 @@ function render(syncState) {
         a.addEventListener('click', (event) => {
           event.preventDefault();
           browser.tabs.create({ url: pr.url });
-          window.close();
+          if (!isSidebar) window.close();
         });
         const emoji = document.createElement('span');
         emoji.textContent = statusEmoji(pr);
@@ -45,15 +69,13 @@ function render(syncState) {
       })
     );
   }
-  const when = syncState.lastSync ? new Date(syncState.lastSync).toLocaleTimeString() : 'never';
-  footer.textContent = syncState.error
-    ? `Last sync failed: ${syncState.error}`
+  if (!updateFooter) return;
+  const when = currentSyncState.lastSync
+    ? new Date(currentSyncState.lastSync).toLocaleTimeString()
+    : 'never';
+  footer.textContent = currentSyncState.error
+    ? `Last sync failed: ${currentSyncState.error}`
     : `Last synced at ${when}`;
-}
-
-async function refresh() {
-  const { syncState } = await browser.storage.local.get('syncState');
-  render(syncState);
 }
 
 document.getElementById('syncNow').addEventListener('click', async () => {
@@ -61,7 +83,11 @@ document.getElementById('syncNow').addEventListener('click', async () => {
   try {
     const result = await browser.runtime.sendMessage({ type: 'sync-now' });
     if (result?.skipped) footer.textContent = result.reason;
-    else render(result);
+    else {
+      syncStateChanged = true;
+      currentSyncState = result;
+      render();
+    }
   } catch (error) {
     footer.textContent = `Sync failed: ${error?.message ?? String(error)}`;
   }
@@ -71,4 +97,32 @@ document.getElementById('openOptions').addEventListener('click', () => {
   browser.runtime.openOptionsPage();
 });
 
-refresh();
+// Keep open views current without changing the stored, unfiltered PR cache.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.settings) {
+    settingsChanged = true;
+    settings = mergeSettings(changes.settings.newValue);
+  }
+  if (changes.syncState) {
+    syncStateChanged = true;
+    currentSyncState = changes.syncState.newValue;
+  }
+  if (changes.settings || changes.syncState) render({ updateFooter: Boolean(changes.syncState) });
+});
+
+// Timers may be throttled while a browser or sidebar is in the background.
+window.addEventListener('focus', () => render({ updateFooter: false }));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) render({ updateFooter: false });
+});
+
+// Do not let a slower initial read replace newer settings or PR data.
+async function initialize() {
+  const stored = await browser.storage.local.get(['settings', 'syncState']);
+  if (!settingsChanged) settings = mergeSettings(stored.settings);
+  if (!syncStateChanged) currentSyncState = stored.syncState;
+  render();
+}
+
+initialize();

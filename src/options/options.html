@@ -35,6 +35,33 @@
         </section>
 
         <section>
+          <h2>Display</h2>
+          <label for="displayMode">Display mode</label>
+          <select id="displayMode" aria-describedby="displayModeHint">
+            <option value="popup">Popup</option>
+            <option value="sidebar">Sidebar</option>
+          </select>
+          <p class="hint" id="displayModeHint">
+            Choose what opens when you click the toolbar icon. Save to apply; existing views stay
+            open.
+          </p>
+
+          <label for="prListMaxAgeDays">Hide PRs not updated within the past (days)</label>
+          <input
+            type="number"
+            id="prListMaxAgeDays"
+            min="0"
+            step="1"
+            aria-describedby="prListMaxAgeDaysHint"
+          />
+          <p class="hint" id="prListMaxAgeDaysHint">
+            Based on each PR's last update. Enter whole days, or 0 (or leave blank) to show all PRs.
+            This hides PRs only in the popup and sidebar; bookmarks, badge counts, and notifications
+            are unaffected.
+          </p>
+        </section>
+
+        <section>
           <h2>Notifications</h2>
           <label class="check"><input type="checkbox" id="notifyCiSuccess" /> CI success ✅</label>
           <label class="check"><input type="checkbox" id="notifyCiFailure" /> CI failure ❌</label>
@@ -80,11 +107,41 @@
             <option value="all">Open and closed</option>
           </select>
 
+          <label for="syncExcludedRepos">Excluded repositories</label>
+          <textarea
+            id="syncExcludedRepos"
+            rows="4"
+            placeholder="owner/repo"
+            spellcheck="false"
+            aria-describedby="syncExcludedReposHint"
+          ></textarea>
+          <p class="hint" id="syncExcludedReposHint">
+            Enter repositories as <code>owner/repo</code>, one per line or separated by commas.
+            Leave blank to include all repositories. Save, then sync to update the popup, bookmarks,
+            and badge.
+          </p>
+
           <label for="syncLimit">Maximum PRs (1–100)</label>
           <input type="number" id="syncLimit" min="1" max="100" step="1" />
 
           <label for="syncInterval">Sync every (minutes)</label>
           <input type="number" id="syncInterval" min="1" step="1" />
+        </section>
+
+        <section>
+          <h2>Toolbar badge</h2>
+          <label for="badgeMaxAgeHours">Count PRs updated within the past (hours)</label>
+          <input
+            type="number"
+            id="badgeMaxAgeHours"
+            min="0"
+            step="1"
+            aria-describedby="badgeMaxAgeHoursHint"
+          />
+          <p class="hint" id="badgeMaxAgeHoursHint">
+            Count open PRs with failing checks based on when the PR was last updated. Enter whole
+            hours, or 0 (or leave blank) for all time. This affects only the badge count.
+          </p>
         </section>
 
         <div class="actions">
