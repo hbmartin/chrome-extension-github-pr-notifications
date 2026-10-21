@@ -28,6 +28,28 @@ describe('buildSearchQuery', () => {
       'is:pr author:@me sort:updated-desc'
     );
   });
+
+  it('excludes multiple repositories while preserving the role and state', () => {
+    expect(
+      buildSearchQuery({
+        role: 'review-requested',
+        state: 'closed',
+        excludedRepos: [' Acme/Widgets ', 'octo-org/repo_name.js', 'acme/widgets'],
+      })
+    ).toBe(
+      'is:pr review-requested:@me sort:updated-desc is:closed -repo:acme/widgets -repo:octo-org/repo_name.js'
+    );
+  });
+
+  it('ignores invalid exclusions and supports exclusions across all states', () => {
+    expect(
+      buildSearchQuery({
+        role: 'author',
+        state: 'all',
+        excludedRepos: ['acme/widgets', 'acme/other is:closed'],
+      })
+    ).toBe('is:pr author:@me sort:updated-desc -repo:acme/widgets');
+  });
 });
 
 describe('graphqlEndpoint', () => {
@@ -134,6 +156,24 @@ describe('fetchPullRequests', () => {
     // Empty (non-PR) nodes are dropped.
     expect(prs).toHaveLength(1);
     expect(prs[0].state).toBe('MERGED');
+  });
+
+  it('sends repository exclusions to GitHub without reducing the requested PR limit', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { search: { nodes: [] } } }),
+    });
+    await fetchPullRequests(
+      mergeSettings({ token: 'tok', sync: { limit: 5, excludedRepos: ['acme/widgets'] } }),
+      fetchImpl
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(body.variables).toEqual({
+      searchQuery: 'is:pr author:@me sort:updated-desc is:open -repo:acme/widgets',
+      limit: 5,
+    });
   });
 
   it('throws on HTTP errors', async () => {

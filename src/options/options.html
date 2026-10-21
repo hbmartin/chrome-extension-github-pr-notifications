@@ -80,6 +80,20 @@
             <option value="all">Open and closed</option>
           </select>
 
+          <label for="syncExcludedRepos">Excluded repositories</label>
+          <textarea
+            id="syncExcludedRepos"
+            rows="4"
+            placeholder="owner/repo"
+            spellcheck="false"
+            aria-describedby="syncExcludedReposHint"
+          ></textarea>
+          <p class="hint" id="syncExcludedReposHint">
+            Enter repositories as <code>owner/repo</code>, one per line or separated by commas.
+            Leave blank to include all repositories. Save, then sync to update the popup, bookmarks,
+            and badge.
+          </p>
+
           <label for="syncLimit">Maximum PRs (1–100)</label>
           <input type="number" id="syncLimit" min="1" max="100" step="1" />
 

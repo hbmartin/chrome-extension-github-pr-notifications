@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
+import { isRepoName, loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
 
 const $ = (id) => document.getElementById(id);
@@ -61,6 +61,7 @@ async function restore() {
   updateSyncNumberInputRequirements(settings.sync.enabled);
   $('syncRole').value = settings.sync.role;
   $('syncState').value = settings.sync.state;
+  $('syncExcludedRepos').value = settings.sync.excludedRepos.join('\n');
   $('syncLimit').value = settings.sync.limit;
   $('syncInterval').value = settings.sync.intervalMinutes;
   await populateFolders(settings.sync.folderId);
@@ -82,6 +83,7 @@ function collect() {
       folderId: $('syncFolder').value,
       role: $('syncRole').value,
       state: $('syncState').value,
+      excludedRepos: $('syncExcludedRepos').value,
       limit: optionalNumberInputValue('syncLimit'),
       intervalMinutes: optionalNumberInputValue('syncInterval'),
     },
@@ -90,6 +92,7 @@ function collect() {
 
 function reflectSanitizedFields(settings) {
   $('githubHost').value = settings.githubHost;
+  $('syncExcludedRepos').value = settings.sync.excludedRepos.join('\n');
   $('syncLimit').value = settings.sync.limit;
   $('syncInterval').value = settings.sync.intervalMinutes;
 }
@@ -112,6 +115,13 @@ async function ensureHostPermission(githubHost) {
 export async function handleSettingsSubmit(event) {
   event.preventDefault();
   updateSyncNumberInputRequirements();
+  const excludedRepos = $('syncExcludedRepos');
+  const entries = excludedRepos.value.split(/[\s,]+/).filter(Boolean);
+  excludedRepos.setCustomValidity(
+    entries.every(isRepoName)
+      ? ''
+      : 'Enter repositories as owner/repo, separated by commas or new lines.'
+  );
   if (!event.currentTarget.checkValidity()) {
     event.currentTarget.reportValidity();
     return;
@@ -173,4 +183,7 @@ export async function handleCreateFolder() {
 $('settingsForm').addEventListener('submit', handleSettingsSubmit);
 $('createFolder').addEventListener('click', handleCreateFolder);
 $('syncEnabled').addEventListener('change', () => updateSyncNumberInputRequirements());
+$('syncExcludedRepos').addEventListener('input', () =>
+  $('syncExcludedRepos').setCustomValidity('')
+);
 restore();

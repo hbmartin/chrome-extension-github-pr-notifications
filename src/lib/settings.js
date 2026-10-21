@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS = {
     role: 'author',
     // 'open' | 'closed' | 'all'
     state: 'open',
+    // Repositories to omit from PR search, in owner/repo format.
+    excludedRepos: [],
     // Max number of PRs fetched (single request, no pagination).
     limit: 10,
     intervalMinutes: 10,
@@ -55,10 +57,30 @@ function deepMerge(defaults, overrides) {
 /** Merge stored (possibly partial/outdated) settings over the defaults. */
 export function mergeSettings(stored) {
   const merged = deepMerge(DEFAULT_SETTINGS, stored);
+  merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);
   const interval = Math.floor(Number(merged.sync.intervalMinutes));
   merged.sync.intervalMinutes = Number.isFinite(interval) ? Math.max(1, interval) : 10;
   return merged;
+}
+
+/** Only accept owner/repo names, never additional search qualifiers or URLs. */
+export function isRepoName(value) {
+  return typeof value === 'string' && /^[a-z\d-]+\/[a-z\d_.-]+$/i.test(value);
+}
+
+/** Accept textarea input or a stored array; normalize and deduplicate names. */
+export function normalizeExcludedRepos(value) {
+  const entries = typeof value === 'string' ? value.split(/[\s,]+/) : value;
+  if (!Array.isArray(entries)) return [];
+  return [
+    ...new Set(
+      entries
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(isRepoName)
+    ),
+  ];
 }
 
 /** GitHub's GraphQL API caps `first` at 100; keep the value sane. */

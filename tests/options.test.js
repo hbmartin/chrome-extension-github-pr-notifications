@@ -38,6 +38,7 @@ function setupDom() {
       <select id="syncFolder"></select>
       <select id="syncRole"><option value="author">Author</option></select>
       <select id="syncState"><option value="open">Open</option></select>
+      <textarea id="syncExcludedRepos"></textarea>
       <input type="number" id="syncLimit" min="1" max="100" step="1" />
       <input type="number" id="syncInterval" min="1" step="1" />
       <button type="submit" id="save">Save</button>
@@ -92,6 +93,80 @@ afterEach(() => {
 });
 
 describe('options page submit handling', () => {
+  it('restores repository exclusions from saved settings', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { sync: { excludedRepos: ['acme/widgets', 'octo-org/tools'] } },
+    });
+    await importOptionsModule();
+
+    expect(document.getElementById('syncExcludedRepos').value).toBe('acme/widgets\nocto-org/tools');
+  });
+
+  it('saves normalized exclusions and reflects them in the form', async () => {
+    mockState.browser = createBrowserMock();
+    const { handleSettingsSubmit } = await importOptionsModule();
+    const exclusions = document.getElementById('syncExcludedRepos');
+    exclusions.value = ' Acme/Widgets,\nocto-org/tools\nacme/widgets ';
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ excludedRepos: ['acme/widgets', 'octo-org/tools'] }),
+      }),
+    });
+    expect(exclusions.value).toBe('acme/widgets\nocto-org/tools');
+  });
+
+  it('clears saved exclusions when the field is blank', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: { sync: { excludedRepos: ['acme/widgets'] } },
+    });
+    const { handleSettingsSubmit } = await importOptionsModule();
+    document.getElementById('syncExcludedRepos').value = '';
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        sync: expect.objectContaining({ excludedRepos: [] }),
+      }),
+    });
+  });
+
+  it.each(['widgets', 'https://github.com/acme/widgets', 'acme/*', 'acme/widgets is:closed'])(
+    'rejects invalid repository input: %s',
+    async (value) => {
+      mockState.browser = createBrowserMock();
+      const { handleSettingsSubmit } = await importOptionsModule();
+      const form = document.getElementById('settingsForm');
+      form.reportValidity = vi.fn();
+      const exclusions = document.getElementById('syncExcludedRepos');
+      exclusions.value = value;
+
+      await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+
+      expect(exclusions.validity.customError).toBe(true);
+      expect(form.reportValidity).toHaveBeenCalled();
+      expect(mockState.browser.storage.local.set).not.toHaveBeenCalled();
+
+      exclusions.value = 'acme/widgets';
+      exclusions.dispatchEvent(new Event('input'));
+      expect(exclusions.validity.customError).toBe(false);
+
+      await handleSettingsSubmit({ preventDefault: vi.fn(), currentTarget: form });
+      expect(mockState.browser.storage.local.set).toHaveBeenCalledOnce();
+    }
+  );
+
   it('reflects sanitized sync values before saving', async () => {
     mockState.browser = createBrowserMock();
     const { handleSettingsSubmit } = await importOptionsModule();

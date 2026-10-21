@@ -30,7 +30,8 @@ automatic syncing of your PRs into a bookmark folder.
 - **Toolbar popup** — your synced PRs at a glance, with a badge counting failing PRs.
 - **Configurable** — which events notify, which PRs to sync (opened by you / assigned /
   mentioned / review-requested; open, closed, or all), how many (default 10, single request,
-  no pagination), how often, notification icon style, and GitHub Enterprise hosts.
+  no pagination), repositories to exclude, how often, notification icon style, and GitHub
+  Enterprise hosts.
 
 ## Setup
 
@@ -43,6 +44,11 @@ automatic syncing of your PRs into a bookmark folder.
 
 On each sync, PR bookmarks in the folder are removed and re-created from the API response;
 anything else you keep in the folder (other bookmarks, subfolders) is left untouched.
+
+To hide PRs from certain repositories, enter their `owner/repo` names in **Options → PR
+bookmark sync → Excluded repositories**, one per line or separated by commas. Save, then
+click **Sync now** (or wait for the next sync) to update the popup, bookmarks, and badge.
+Exclusions apply before the maximum PR count. Clear the field to include all repositories again.
 
 CI/comment notifications need no token — they work by watching PR pages you have open in a tab.
 Notifications are per-tab, so a PR must be open in some tab for you to get them; bookmark sync

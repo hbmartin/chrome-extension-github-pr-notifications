@@ -4,6 +4,8 @@
  * so one request per sync regardless of the PR limit.
  */
 
+import { normalizeExcludedRepos } from './settings.js';
+
 const ROLE_QUALIFIERS = {
   author: 'author:@me',
   assigned: 'assignee:@me',
@@ -30,11 +32,14 @@ export function normalizeGitHubHost(githubHost) {
   }
 }
 
-export function buildSearchQuery({ role, state }) {
+export function buildSearchQuery({ role, state, excludedRepos }) {
   const qualifier = ROLE_QUALIFIERS[role] ?? ROLE_QUALIFIERS.author;
   let query = `is:pr ${qualifier} sort:updated-desc`;
   if (state === 'open' || state === 'closed') {
     query += ` is:${state}`;
+  }
+  for (const repo of normalizeExcludedRepos(excludedRepos)) {
+    query += ` -repo:${repo}`;
   }
   return query;
 }

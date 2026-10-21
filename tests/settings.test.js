@@ -14,6 +14,42 @@ describe('mergeSettings', () => {
     expect(merged.sync.limit).toBe(25);
     expect(merged.sync.role).toBe('author');
     expect(merged.notifications.ciFailure).toBe(true);
+    expect(merged.sync.excludedRepos).toEqual([]);
+  });
+
+  it('normalizes saved repository exclusions and removes duplicates', () => {
+    const merged = mergeSettings({
+      sync: { excludedRepos: [' Acme/Widgets ', 'acme/widgets', 'octo-org/.github'] },
+    });
+    expect(merged.sync.excludedRepos).toEqual(['acme/widgets', 'octo-org/.github']);
+  });
+
+  it('parses repository exclusions separated by commas or whitespace', () => {
+    const merged = mergeSettings({
+      sync: { excludedRepos: ' Acme/Widgets,\r\nocto-org/repo_name.js\n\nacme/widgets ' },
+    });
+    expect(merged.sync.excludedRepos).toEqual(['acme/widgets', 'octo-org/repo_name.js']);
+  });
+
+  it.each([null, 123, {}, ''])('handles malformed or empty exclusions: %j', (excludedRepos) => {
+    expect(mergeSettings({ sync: { excludedRepos } }).sync.excludedRepos).toEqual([]);
+  });
+
+  it('drops invalid stored entries instead of inserting search syntax', () => {
+    const merged = mergeSettings({
+      sync: {
+        excludedRepos: [
+          'acme/widgets',
+          null,
+          123,
+          'widgets',
+          'https://github.com/acme/widgets',
+          'acme/widgets is:closed',
+          'acme/*',
+        ],
+      },
+    });
+    expect(merged.sync.excludedRepos).toEqual(['acme/widgets']);
   });
 
   it('drops unknown keys from storage', () => {
