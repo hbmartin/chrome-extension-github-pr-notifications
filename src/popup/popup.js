@@ -3,6 +3,8 @@ import { statusEmoji } from '../lib/emoji.js';
 
 const list = document.getElementById('prList');
 const footer = document.getElementById('footer');
+const isSidebar = new URLSearchParams(window.location.search).get('view') === 'sidebar';
+document.body.classList.toggle('sidebar', isSidebar);
 
 function renderEmpty(text) {
   const li = document.createElement('li');
@@ -29,7 +31,7 @@ function render(syncState) {
         a.addEventListener('click', (event) => {
           event.preventDefault();
           browser.tabs.create({ url: pr.url });
-          window.close();
+          if (!isSidebar) window.close();
         });
         const emoji = document.createElement('span');
         emoji.textContent = statusEmoji(pr);
@@ -51,11 +53,6 @@ function render(syncState) {
     : `Last synced at ${when}`;
 }
 
-async function refresh() {
-  const { syncState } = await browser.storage.local.get('syncState');
-  render(syncState);
-}
-
 document.getElementById('syncNow').addEventListener('click', async () => {
   footer.textContent = 'Syncing…';
   try {
@@ -71,4 +68,19 @@ document.getElementById('openOptions').addEventListener('click', () => {
   browser.runtime.openOptionsPage();
 });
 
-refresh();
+// A persistent sidebar must update when background sync completes in another context.
+let syncStateChanged = false;
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.syncState) {
+    syncStateChanged = true;
+    render(changes.syncState.newValue);
+  }
+});
+
+// Do not let a slower initial read replace a newer storage-change notification.
+async function initialize() {
+  const { syncState } = await browser.storage.local.get('syncState');
+  if (!syncStateChanged) render(syncState);
+}
+
+initialize();

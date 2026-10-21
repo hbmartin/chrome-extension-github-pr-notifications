@@ -27,8 +27,9 @@ automatic syncing of your PRs into a bookmark folder.
   | 🟣    | merged                         |
   | ⚫    | closed without merging         |
 
-- **Toolbar popup** — your synced PRs at a glance, with a badge counting failing PRs and an
-  optional limit based on how recently each PR was updated.
+- **Popup or sidebar** — view your synced PRs in a compact toolbar popup or a persistent native
+  sidebar in Chrome and Firefox, with a badge counting failing PRs and an optional limit based
+  on how recently each PR was updated.
 - **Configurable** — which events notify, which PRs to sync (opened by you / assigned /
   mentioned / review-requested; open, closed, or all), how many (default 10, single request,
   no pagination), repositories to exclude, how often, notification icon style, and GitHub
@@ -42,6 +43,13 @@ automatic syncing of your PRs into a bookmark folder.
    fine-grained with read access to pull requests. The token is stored locally in your browser
    and only ever sent to your GitHub host.
 3. Enable **PR bookmark sync**, pick (or create) a bookmark folder, and save.
+
+Choose **Options → Display → Display mode → Popup / Sidebar**, then **Save** to choose what
+the next toolbar-icon click opens. Popup is the default, and the choice is stored locally for
+all windows of that browser. Saving leaves existing views open. The sidebar stays open when
+you open a PR and updates as background sync finishes. Its side is controlled by browser settings.
+If the browser does not support native sidebars, the extension continues using the popup and
+the Sidebar choice is disabled.
 
 On each sync, PR bookmarks in the folder are removed and re-created from the API response;
 anything else you keep in the folder (other bookmarks, subfolders) is left untouched.

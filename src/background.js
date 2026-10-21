@@ -2,6 +2,7 @@ import browser from 'webextension-polyfill';
 import { BADGE_EXPIRY_ALARM_NAME, loadSettings, SYNC_ALARM_NAME } from './lib/settings.js';
 import { fetchPullRequests } from './lib/github.js';
 import { syncPrBookmarks } from './lib/bookmarks.js';
+import { configureDisplay } from './lib/display.js';
 import { getBadgeState } from './lib/badge.js';
 
 /**
@@ -160,12 +161,43 @@ browser.alarms.onAlarm.addListener((alarm) => {
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.settings) {
+    updateDisplay();
     return scheduleSyncAlarm();
   }
 });
 
 browser.runtime.onInstalled.addListener(scheduleSyncAlarm);
 browser.runtime.onStartup.addListener(scheduleSyncAlarm);
+
+// ---------------------------------------------------------------------------
+// Toolbar display mode
+// ---------------------------------------------------------------------------
+
+let displayUpdate = Promise.resolve();
+
+function updateDisplay() {
+  // Serialize changes so an older storage read cannot overwrite a newer choice.
+  displayUpdate = displayUpdate
+    .then(async () => {
+      const settings = await loadSettings(browser.storage.local);
+      await configureDisplay(browser, settings.displayMode);
+    })
+    .catch((error) => console.warn('Failed to update toolbar display', error));
+  return displayUpdate;
+}
+
+if (typeof browser.sidebarAction?.toggle === 'function') {
+  browser.action.onClicked.addListener(() => {
+    // A popup suppresses onClicked. Call directly here to retain the user gesture.
+    browser.sidebarAction.toggle().catch((error) => {
+      console.warn('Failed to toggle sidebar', error);
+    });
+  });
+}
+
+browser.runtime.onInstalled.addListener(updateDisplay);
+browser.runtime.onStartup.addListener(updateDisplay);
+updateDisplay();
 
 // ---------------------------------------------------------------------------
 // Messages from content script / popup

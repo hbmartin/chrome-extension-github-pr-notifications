@@ -23,6 +23,26 @@ describe('mergeSettings', () => {
     expect(merged.sync.excludedRepos).toEqual([]);
   });
 
+  it('preserves the sidebar preference alongside existing settings', () => {
+    const settings = mergeSettings({
+      displayMode: 'sidebar',
+      token: 'secret',
+      sync: { excludedRepos: ['acme/widgets'] },
+      notifications: { comments: false },
+    });
+    expect(settings.displayMode).toBe('sidebar');
+    expect(settings.token).toBe('secret');
+    expect(settings.sync.excludedRepos).toEqual(['acme/widgets']);
+    expect(settings.notifications.comments).toBe(false);
+  });
+
+  it.each([undefined, null, '', 'invalid', 'SIDEBAR', 1, {}, []])(
+    'defaults malformed display modes to popup: %j',
+    (displayMode) => {
+      expect(mergeSettings({ displayMode }).displayMode).toBe('popup');
+    }
+  );
+
   it('normalizes saved repository exclusions and removes duplicates', () => {
     const merged = mergeSettings({
       sync: { excludedRepos: [' Acme/Widgets ', 'acme/widgets', 'octo-org/.github'] },

@@ -1,6 +1,7 @@
 import browser from 'webextension-polyfill';
 import { isRepoName, loadSettings, mergeSettings, saveSettings } from '../lib/settings.js';
 import { normalizeGitHubHost } from '../lib/github.js';
+import { supportsSidebar } from '../lib/display.js';
 
 const $ = (id) => document.getElementById(id);
 const syncNumberInputIds = ['syncLimit', 'syncInterval'];
@@ -50,6 +51,13 @@ async function populateFolders(selectedId) {
 
 async function restore() {
   const settings = await loadSettings(browser.storage.local);
+  const sidebarAvailable = supportsSidebar(browser);
+  $('displayMode').querySelector('option[value="sidebar"]').disabled = !sidebarAvailable;
+  $('displayMode').value = sidebarAvailable ? settings.displayMode : 'popup';
+  if (!sidebarAvailable) {
+    $('displayModeHint').textContent =
+      'Sidebar is unavailable in this browser. The toolbar opens a popup.';
+  }
   $('token').value = settings.token;
   $('githubHost').value = settings.githubHost;
   $('notifyCiSuccess').checked = settings.notifications.ciSuccess;
@@ -70,6 +78,7 @@ async function restore() {
 
 function collect() {
   return {
+    displayMode: supportsSidebar(browser) ? $('displayMode').value : 'popup',
     token: $('token').value.trim(),
     githubHost: normalizeGitHubHost($('githubHost').value),
     notifications: {

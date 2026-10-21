@@ -26,7 +26,10 @@
     "page": "options/options.html",
     "open_in_tab": true
   },
-  "permissions": ["notifications", "storage", "alarms", "bookmarks"],
+  "side_panel": {
+    "default_path": "popup/popup.html?view=sidebar"
+  },
+  "permissions": ["notifications", "storage", "alarms", "bookmarks", "sidePanel"],
   "host_permissions": ["https://github.com/*", "https://api.github.com/*"],
   "optional_host_permissions": ["https://*/*"],
   "content_scripts": [

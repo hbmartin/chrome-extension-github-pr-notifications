@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS = {
   iconTheme: 'octocat',
   // Count failing PRs updated within this many hours; 0 means all time.
   badgeMaxAgeHours: 0,
+  // What the toolbar icon opens: 'popup' | 'sidebar'.
+  displayMode: 'popup',
   sync: {
     enabled: false,
     // Bookmark folder that PR bookmarks are synced into.
@@ -66,6 +68,7 @@ export function mergeSettings(stored) {
       : 0;
   merged.badgeMaxAgeHours =
     Number.isSafeInteger(hours * 3_600_000) && Number.isInteger(hours) && hours >= 0 ? hours : 0;
+  merged.displayMode = merged.displayMode === 'sidebar' ? 'sidebar' : 'popup';
   merged.sync.excludedRepos = normalizeExcludedRepos(merged.sync.excludedRepos);
   merged.sync.limit = clampLimit(merged.sync.limit);
   const interval = Math.floor(Number(merged.sync.intervalMinutes));

@@ -27,6 +27,11 @@ vi.mock('webextension-polyfill', () => ({
 function setupDom() {
   document.body.innerHTML = `
     <form id="settingsForm">
+      <select id="displayMode">
+        <option value="popup">Popup</option>
+        <option value="sidebar">Sidebar</option>
+      </select>
+      <p id="displayModeHint"></p>
       <input id="token" />
       <input id="githubHost" />
       <input type="checkbox" id="notifyCiSuccess" />
@@ -53,6 +58,8 @@ function setupDom() {
 
 function createBrowserMock(overrides = {}) {
   return {
+    sidePanel: overrides.sidePanel,
+    sidebarAction: overrides.sidebarAction,
     storage: {
       local: {
         get: vi.fn(async () => ({ settings: undefined })),
@@ -94,6 +101,64 @@ afterEach(() => {
 });
 
 describe('options page submit handling', () => {
+  it.each(['chrome', 'firefox'])('restores sidebar mode on %s', async (target) => {
+    mockState.browser = createBrowserMock(
+      target === 'chrome'
+        ? { sidePanel: { setPanelBehavior: vi.fn() } }
+        : { sidebarAction: { toggle: vi.fn() } }
+    );
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
+    await importOptionsModule();
+
+    expect(document.getElementById('displayMode').value).toBe('sidebar');
+    expect(document.querySelector('option[value="sidebar"]').disabled).toBe(false);
+  });
+
+  it('disables sidebar mode when no native sidebar API is available', async () => {
+    mockState.browser = createBrowserMock();
+    mockState.browser.storage.local.get.mockResolvedValue({ settings: { displayMode: 'sidebar' } });
+    const { handleSettingsSubmit } = await importOptionsModule();
+
+    expect(document.querySelector('option[value="sidebar"]').disabled).toBe(true);
+    expect(document.getElementById('displayMode').value).toBe('popup');
+    expect(document.getElementById('displayModeHint').textContent).toContain('unavailable');
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ displayMode: 'popup' }),
+    });
+  });
+
+  it.each(['popup', 'sidebar'])('saves %s mode without losing other preferences', async (mode) => {
+    mockState.browser = createBrowserMock({ sidePanel: { setPanelBehavior: vi.fn() } });
+    mockState.browser.storage.local.get.mockResolvedValue({
+      settings: {
+        displayMode: 'sidebar',
+        token: 'secret',
+        notifications: { comments: false },
+        sync: { excludedRepos: ['acme/widgets'] },
+      },
+    });
+    const { handleSettingsSubmit } = await importOptionsModule();
+    document.getElementById('displayMode').value = mode;
+
+    await handleSettingsSubmit({
+      preventDefault: vi.fn(),
+      currentTarget: document.getElementById('settingsForm'),
+    });
+
+    expect(mockState.browser.storage.local.set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        displayMode: mode,
+        token: 'secret',
+        notifications: expect.objectContaining({ comments: false }),
+        sync: expect.objectContaining({ excludedRepos: ['acme/widgets'] }),
+      }),
+    });
+  });
+
   it('restores repository exclusions from saved settings', async () => {
     mockState.browser = createBrowserMock();
     mockState.browser.storage.local.get.mockResolvedValue({

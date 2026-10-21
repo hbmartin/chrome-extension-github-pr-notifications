@@ -18,6 +18,34 @@ body {
   font-size: 13px;
 }
 
+body.sidebar {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body.sidebar ul {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+body.sidebar header,
+body.sidebar footer {
+  flex-shrink: 0;
+}
+
+body.sidebar .pr-title {
+  min-width: 0;
+}
+
+body.sidebar .pr-repo {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 header {
   display: flex;
   justify-content: space-between;
